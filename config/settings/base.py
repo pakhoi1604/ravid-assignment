@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -97,8 +98,16 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=env_int("JWT_ACCESS_TOKEN_LIFETIME_DAYS", 7)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env_int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", 30)),
 }
 
 SPECTACULAR_SETTINGS = {
@@ -127,9 +136,9 @@ EMBEDDING_MODEL_NAME = os.getenv(
     "sentence-transformers/all-MiniLM-L6-v2",
 )
 MAX_UPLOAD_SIZE_MB = env_int("MAX_UPLOAD_SIZE_MB", 25)
-RAG_CHUNK_SIZE = env_int("RAG_CHUNK_SIZE", 1000)
-RAG_CHUNK_OVERLAP = env_int("RAG_CHUNK_OVERLAP", 150)
-RAG_RETRIEVAL_TOP_K = env_int("RAG_RETRIEVAL_TOP_K", 5)
+VECTOR_CHUNK_SIZE = env_int("VECTOR_CHUNK_SIZE", 1000)
+VECTOR_CHUNK_OVERLAP = env_int("VECTOR_CHUNK_OVERLAP", 150)
+VECTOR_COLLECTION_NAME = os.getenv("VECTOR_COLLECTION_NAME", "ravid_documents")
 
 LOGGING = {
     "version": 1,

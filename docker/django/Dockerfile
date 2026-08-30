@@ -17,7 +17,7 @@ RUN apt-get update \
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra vector-ingestion --no-install-project
 
 COPY . .
 RUN mkdir -p /app/media /app/staticfiles /home/app/.cache/huggingface \

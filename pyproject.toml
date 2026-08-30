@@ -1,7 +1,7 @@
 [project]
 name = "ravid"
 version = "0.1.0"
-description = "RAVID document RAG backend foundation"
+description = "RAVID document knowledge-base backend foundation"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -17,12 +17,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-rag = [
+vector-ingestion = [
     "chromadb>=1.0,<2",
     "langchain>=0.3,<0.4",
     "langchain-chroma>=0.2,<0.3",
     "langchain-huggingface>=0.3,<0.4",
-    "langchain-openai>=0.3,<0.4",
     "pypdf>=6.0,<7",
     "sentence-transformers>=5.0,<6",
 ]

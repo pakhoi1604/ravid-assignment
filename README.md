@@ -1,8 +1,9 @@
 # RAVID Backend
 
-Runnable Django/DRF foundation for the RAVID document RAG assignment. This repository currently
-contains infrastructure and startup wiring only: document upload, ingestion, chat, credits, billing,
-HyDE, and LLM calls are intentionally deferred.
+Runnable Django/DRF backend for the RAVID document knowledge-base assignment. This repository
+supports authenticated document upload, asynchronous ingestion status, extraction, chunking, and
+Chroma vector indexing. Chat, credits, billing, subscriptions, HyDE, and LLM answer generation are
+intentionally deferred.
 
 ## Prerequisites
 
@@ -44,6 +45,23 @@ HyDE, and LLM calls are intentionally deferred.
    Swagger UI is available at `http://localhost:8000/api/docs/`. Flower is bound to loopback at
    `http://localhost:5555/`.
 
+   Load local-only, non-admin test accounts and exercise document upload:
+
+   ```bash
+   make load-test-accounts
+   curl --fail --silent --show-error \
+     -X POST http://localhost:8000/api/auth/token/ \
+     -H "Content-Type: application/json" \
+     -d '{"username":"reviewer","password":"reviewer-password-123"}'
+   curl --fail --silent --show-error \
+     -X POST http://localhost:8000/api/documents/upload/ \
+     -H "Authorization: Bearer <access-token>" \
+     -F "file=@docs/2026-08-30 R.A.V.I.D.md"
+   curl --fail --silent --show-error \
+     "http://localhost:8000/api/documents/status/?task_id=<task-id>" \
+     -H "Authorization: Bearer <access-token>"
+   ```
+
 4. Stop containers without deleting persisted data:
 
    ```bash
@@ -61,16 +79,24 @@ uv run pytest
 uv run python manage.py runserver
 ```
 
-The local settings use SQLite and do not require PostgreSQL, Redis, Chroma, or an OpenRouter key.
-The Docker image installs the core application runtime needed by the current skeleton; the locked
-RAG extra is validated by the local `uv sync --all-extras --dev --frozen` command and will be added
-to the runtime image when ingestion/query code needs those imports.
+The local settings use SQLite and eager Celery, so unit tests do not require PostgreSQL, Redis,
+Chroma, or an OpenRouter key. The Docker image installs the vector-ingestion runtime used by the web
+and worker containers.
+
+Load the same test accounts locally with:
+
+```bash
+make load-test-accounts-local
+```
+
+JWT access tokens are configured for reviewer convenience and last 7 days by default. Override
+`JWT_ACCESS_TOKEN_LIFETIME_DAYS` and `JWT_REFRESH_TOKEN_LIFETIME_DAYS` in `.env` if needed.
 
 ## Checks
 
 `make sync`, `make lint`, `make check`, `make migrations`, `make test`, and
-`make compose-config` are thin wrappers around the authoritative commands used by CI and the
-reviewer path.
+`make compose-config`, and `make load-test-accounts` are thin wrappers around the authoritative
+commands used by CI and the reviewer path.
 
 ## Services
 
@@ -78,7 +104,7 @@ reviewer path.
 - `celery`: asynchronous worker using the same application image.
 - `db`: PostgreSQL with a named volume.
 - `redis`: Celery broker and result backend.
-- `chroma`: internal vector store service for later LangChain integration. The image is derived
+- `chroma`: internal vector store service for document ingestion. The image is derived
   from pinned `chromadb/chroma:1.0.15` only to add `curl` for a real Compose health check.
 - `flower`: local Celery dashboard on `127.0.0.1:5555`.
 

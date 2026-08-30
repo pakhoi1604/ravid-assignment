@@ -1,4 +1,4 @@
-.PHONY: sync lint check check-local migrations test compose-config compose-build compose-up compose-down smoke
+.PHONY: sync lint check check-local migrations test compose-config compose-build compose-up compose-down load-test-accounts load-test-accounts-local smoke
 
 sync:
 	uv sync --all-extras --dev --frozen
@@ -29,6 +29,12 @@ compose-up:
 
 compose-down:
 	docker compose down
+
+load-test-accounts:
+	docker compose exec -e ALLOW_TEST_ACCOUNT_SEED=true web python manage.py load_test_accounts
+
+load-test-accounts-local:
+	ALLOW_TEST_ACCOUNT_SEED=true uv run python manage.py load_test_accounts --settings=config.settings.local
 
 smoke:
 	curl --fail --silent --show-error http://localhost:8000/api/health/

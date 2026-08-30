@@ -46,6 +46,12 @@ def test_application_image_runs_as_non_root_user():
     assert "\nUSER app\n" in dockerfile
 
 
+def test_application_image_installs_vector_ingestion_dependencies():
+    dockerfile = Path("docker/django/Dockerfile").read_text()
+
+    assert "uv sync --frozen --no-dev --extra vector-ingestion --no-install-project" in dockerfile
+
+
 def test_chroma_image_runs_as_non_root_user():
     dockerfile = Path("docker/chroma/Dockerfile").read_text()
 
