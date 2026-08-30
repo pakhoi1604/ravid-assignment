@@ -23,7 +23,8 @@ Docker Compose defines one application image used by both `web` and `celery`.
 - `db` stores relational state in PostgreSQL.
 - `redis` provides the Celery broker and result backend.
 - `chroma` provides internal vector storage for document ingestion. Its image is based on pinned
-  `chromadb/chroma:1.0.15` with `curl` added for health checks.
+  `chromadb/chroma:1.5.9` with `curl` added for health checks; the Python client uses the same
+  version.
 - `flower` exposes a loopback-only Celery dashboard for reviewers.
 
 The application services share media and Hugging Face cache volumes so upload handling and Celery
@@ -41,6 +42,11 @@ Redis result state is operational only. User-visible ingestion status is stored 
 Document ingestion extracts text from PDF, TXT, and Markdown files, splits text with LangChain,
 embeds chunks, and writes them to one Chroma collection. Vector records carry user and public
 document metadata so later retrieval can enforce owner isolation.
+
+Part 1 depends on modular LangChain packages only: `langchain-text-splitters` for chunking,
+`langchain-huggingface` for local embeddings, and `langchain-chroma` for vector storage. The
+umbrella `langchain` package is not installed because Part 1 does not import it. Shared
+`langchain-core` functionality remains transitive until a later module imports it directly.
 
 ## Public Surface
 

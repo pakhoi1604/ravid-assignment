@@ -83,6 +83,11 @@ The local settings use SQLite and eager Celery, so unit tests do not require Pos
 Chroma, or an OpenRouter key. The Docker image installs the vector-ingestion runtime used by the web
 and worker containers.
 
+The `vector-ingestion` extra installs only the LangChain components Part 1 imports:
+`langchain-text-splitters`, `langchain-chroma`, and `langchain-huggingface`. The unused `langchain`
+umbrella package is intentionally omitted; shared packages such as `langchain-core` remain
+transitive until application source imports them directly.
+
 Load the same test accounts locally with:
 
 ```bash
@@ -105,7 +110,8 @@ commands used by CI and the reviewer path.
 - `db`: PostgreSQL with a named volume.
 - `redis`: Celery broker and result backend.
 - `chroma`: internal vector store service for document ingestion. The image is derived
-  from pinned `chromadb/chroma:1.0.15` only to add `curl` for a real Compose health check.
+  from pinned `chromadb/chroma:1.5.9` only to add `curl` for a real Compose health check. The Python
+  client is pinned to the same version.
 - `flower`: local Celery dashboard on `127.0.0.1:5555`.
 
 PostgreSQL, Redis, and Chroma are not published to external host interfaces.

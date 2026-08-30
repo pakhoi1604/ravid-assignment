@@ -1,0 +1,20 @@
+{
+  "decision": "PASS",
+  "score": 9.5,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "minimal stable modular dependency graph",
+    "Chroma 1.5.9 client-server alignment",
+    "unchanged public API and production source",
+    "targeted authorized state reset",
+    "offline and live ingestion verification"
+  ],
+  "regressionProof": [
+    "sixteen focused tests passed",
+    "fifty-six full tests passed",
+    "fresh-stack upload and Chroma inspection passed",
+    "independent tester and docs reviews passed"
+  ],
+  "contractStatus": "OK",
+  "blockingReasons": []
+}

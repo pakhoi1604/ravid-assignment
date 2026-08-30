@@ -1,0 +1,28 @@
+{
+  "skill": "ck:cook",
+  "mode": "auto",
+  "task": "Refresh minimal stable LangChain dependencies and revalidate Part 1",
+  "acceptanceCriteria": [
+    "remove the unused langchain umbrella package",
+    "align the Chroma client and server at 1.5.9",
+    "preserve Part 1 public contracts",
+    "pass offline and live upload-to-vector verification"
+  ],
+  "touchpoints": [
+    "pyproject.toml and uv.lock",
+    "Chroma Docker and Compose version contracts",
+    "document ingestion boundary tests",
+    "version-bearing project documentation"
+  ],
+  "publicContracts": [
+    "document upload endpoint",
+    "ingestion status endpoint",
+    "owner-scoped vector metadata"
+  ],
+  "blastRadius": [
+    "Part 1 vector-ingestion dependency graph",
+    "local Docker client-server compatibility",
+    "disposable local validation state"
+  ],
+  "scoutSummary": "Part 1 imports only modular splitter, Chroma, Hugging Face, chromadb, and PDF packages; application source and public contracts required no compatibility edits."
+}

@@ -1,0 +1,39 @@
+{
+  "commands": [
+    {
+      "command": "uv run --frozen pytest tests/documents/test_chunking.py tests/documents/test_vector_store.py tests/documents/test_ingestion_pipeline.py tests/smoke/test_compose_contracts.py",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-30T18:28:28+07:00",
+      "summary": "Sixteen focused dependency and ingestion contract tests passed."
+    },
+    {
+      "command": "uv run --frozen pytest",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-30T18:28:28+07:00",
+      "summary": "The complete 56-test suite passed."
+    },
+    {
+      "command": "uv run --frozen ruff check apps config tests and Django shared checks",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-30T18:28:28+07:00",
+      "summary": "Lint, system check, and migration drift checks passed."
+    },
+    {
+      "command": "uv lock --check and uv sync --all-extras --dev --frozen",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-30T18:28:28+07:00",
+      "summary": "The lock is coherent and the frozen environment synchronizes."
+    },
+    {
+      "command": "docker compose build web chroma and fresh-stack live upload verification",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-30T18:28:28+07:00",
+      "summary": "Images built; upload reached SUCCESS and direct Chroma inspection verified one 384-dimensional embedding with expected metadata."
+    }
+  ]
+}

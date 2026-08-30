@@ -1,0 +1,9 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "The accepted live-validation workflow permanently reset three label-verified local test-data volumes."
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": true
+}
