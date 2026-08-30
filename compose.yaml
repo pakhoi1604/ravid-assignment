@@ -50,7 +50,7 @@ services:
 
   celery:
     image: ravid-app:local
-    command: celery -A config worker --loglevel=info --hostname=celery@%h
+    command: celery -A config worker --loglevel=info --hostname=celery@%h --autoscale=2,1 --max-tasks-per-child=5
     environment:
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
       SECRET_KEY: ${SECRET_KEY:-change-me-for-local-review-only}
