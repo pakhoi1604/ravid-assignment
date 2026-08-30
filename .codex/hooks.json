@@ -9,6 +9,30 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".codex/hooks/e3f4e6fe-descriptive-name.cjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Glob|Grep|Read|Edit|Write|command_execution",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".codex/hooks/d3d5933f-scout-block.cjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \".codex/hooks/27a4d5f4-privacy-block.cjs\""
+          }
+        ]
+      }
     ]
   }
 }
