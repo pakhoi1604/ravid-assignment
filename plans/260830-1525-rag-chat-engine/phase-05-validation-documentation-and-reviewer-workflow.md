@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Validation Documentation and Reviewer Workflow"
-status: pending
+status: completed
 priority: P2
 dependencies: [1, 2, 3, 4]
 effort: "M"
@@ -9,116 +9,135 @@ effort: "M"
 
 # Phase 5: Validation Documentation and Reviewer Workflow
 
+## Context Links
+
+- Reviewer guide: `README.md`
+- Architecture: `docs/system-architecture.md`
+- Compose contracts: `tests/smoke/test_compose_contracts.py`
+- Related optional tooling plan: `../260830-1608-part-1-endpoint-smoke-tests/plan.md`
+
 ## Overview
 
-Broaden validation, update reviewer documentation, and keep the architecture docs aligned with the
-new Part 2 public API and runtime configuration.
+Run the full offline and container gates, document a reproducible synthetic reviewer workflow, and
+separate deterministic CI validation from a credentialed free-tier OpenRouter smoke.
 
 ## Requirements
 
-- Functional: README gives a deterministic reviewer path for authenticating, uploading, waiting for
-  ingestion, and querying `/api/chat/query/`.
-- Functional: environment docs list required OpenRouter and RAG settings without secrets.
-- Functional: Docker image installs the dependencies needed by the RAG runtime.
-- Non-functional: local unit tests pass without network, Chroma, Redis, or OpenRouter.
-- Non-functional: Docker Compose validation still protects web/worker/db/redis/chroma/flower shape.
+- README covers auth, synthetic upload, ingestion polling, chat query, and expected grounded answer.
+- Runtime configuration is forwarded correctly without exposing provider secrets to unnecessary
+  services.
+- Unit/API tests never call OpenRouter, Chroma, Redis, or Celery.
+- Live testing uses only a rotated key and non-sensitive synthetic content.
 
 ## Architecture
 
-Documentation should describe the current system as a modular Django monolith:
+Document the implemented modular monolith:
 
-- `apps.accounts`: JWT auth plus local subscription/credit gate.
-- `apps.documents`: upload, ingestion, extraction, chunking, vector writes.
-- `apps.rag`: owner-scoped retrieval, OpenRouter RAG prompt, and chat endpoint.
+- `apps.accounts`: built-in Django identity plus local `Subscription`/daily usage gate.
+- `apps.documents`: upload, Celery ingestion, extraction, LangChain splitting, vector writes, and
+  owner-scoped vector retrieval.
+- `apps.rag`: bounded prompt/model chain, OpenRouter free-tier client, accounting orchestration, and
+  chat API.
 
-README should separate:
-
-- local no-network test path;
-- Docker reviewer path;
-- optional OpenRouter-backed manual query path.
-
-Do not commit runtime env files or any real provider key.
+The local daily token limit is application quota, not OpenRouter billing credit. A free-tier account
+and API key are still required for a live request; no paid subscription is required.
 
 ## Related Code Files
 
-- Modify: `README.md` - add Part 2 setup, curl examples, and test commands.
-- Modify: `docs/system-architecture.md` - update module boundaries and public API list.
-- Modify: environment example template - add safe placeholders for RAG settings.
-- Modify: `docker/django/Dockerfile` - confirm RAG/vector extra is installed in app image.
-- Modify: `tests/smoke/test_compose_contracts.py` - only if dependency install or env contract changes.
-- Potentially create: `docs/journals/<timestamp>-rag-chat-engine.md` after implementation.
+- Modify: `README.md` - Part 2 setup, synthetic reviewer flow, privacy/free-tier notes.
+- Modify: `docs/system-architecture.md` - current account, retrieval, RAG, and API boundaries.
+- Modify: repository environment example template - set safe free-tier/RAG defaults.
+- Modify: `compose.yaml` - forward settings and add a profile-gated `test` service.
+- Create: `tests/fixtures/rag/reviewer-handbook.md` - deterministic non-confidential source.
+- Create: `tests/accounts/test_entitlements_postgres.py` and
+  `tests/documents/test_vector_retrieval_chroma.py` - Docker-backed invariant gates.
+- Modify: `tests/smoke/test_configuration.py` and `tests/smoke/test_compose_contracts.py` - defaults,
+  env forwarding, and dependency contracts.
+- Modify: `tests/smoke/test_health.py` - chat OpenAPI assertions if not completed in Phase 4.
+- Verify: `docker/django/Dockerfile` - lean runtime and Phase 1's profile-gated test stage remain
+  separated.
 
 ## Implementation Steps
 
-1. Run focused tests from phases 1-4.
-2. Run broader local checks:
-
-   ```bash
-   uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test
-   uv run python manage.py check --settings=config.settings.test
-   uv run pytest
-   docker compose config --quiet
-   ```
-
-3. If dependency lock changes, run the repository's lock/sync command and commit lockfile changes
-   with `pyproject.toml`.
-4. Update the environment example template with safe placeholders:
-   - `DEFAULT_DAILY_TOKEN_LIMIT=20000`
-   - `RAG_RETRIEVAL_K=4`
-   - `RAG_MAX_CONTEXT_CHARS=6000`
-   - `RAG_MAX_OUTPUT_TOKENS=800`
-   - `RAG_TEMPERATURE=0`
-   - `OPENROUTER_APP_TITLE=RAVID Backend`
-   - `OPENROUTER_HTTP_REFERER=`
-5. Update README with manual flow:
-
-   ```bash
-   curl --fail --silent --show-error \
-     -X POST http://localhost:8000/api/chat/query/ \
-     -H "Authorization: Bearer <access-token>" \
-     -H "Content-Type: application/json" \
-     -d '{"query":"What is the cancellation policy mentioned in the employee handbook?"}'
-   ```
-
-6. State that local tests mock provider calls and that real answer generation needs provider
-   credentials.
-7. Update `docs/system-architecture.md` public surface with `POST /api/chat/query/` and explain
-   local entitlement/token usage.
-8. Run final smoke commands and capture exact failures if any external services are unavailable.
+1. Add a tiny synthetic handbook with a unique fact and query. Do not use the assignment PDF,
+   private uploads, or filenames from a developer machine as reviewer data.
+2. Update safe defaults and docs:
+   - `OPENROUTER_MODEL=openrouter/free`;
+   - `DEFAULT_DAILY_TOKEN_LIMIT=20000`;
+   - `RAG_RETRIEVAL_K=4`, `RAG_MAX_CONTEXT_CHARS=6000`;
+   - `RAG_MAX_OUTPUT_TOKENS=800`, `RAG_CHAT_OVERHEAD_TOKENS=256`, `RAG_TEMPERATURE=0`;
+   - `RAG_PROVIDER_TIMEOUT_MS=10000`, `RAG_PROVIDER_MAX_RETRIES=0`;
+   - blank `OPENROUTER_APP_URL` and non-secret `OPENROUTER_APP_TITLE`.
+3. Forward shared non-secret settings where needed. Forward `OPENROUTER_API_KEY`, base URL, model,
+   and app metadata to web only because Part 2 calls the model synchronously; do not expand or print
+   resolved Compose configuration.
+4. Extend configuration/Compose tests to prove free default, direct packages, web secret ownership,
+   and container env contracts.
+5. Update README reviewer flow: seed accounts, obtain JWT, upload synthetic document, poll ingestion
+   to `SUCCESS`, query a known fact, and show the expected answer shape.
+6. Explain that retrieved chunks are sent to an external model provider. Require synthetic or
+   approved non-sensitive content for the free-tier smoke.
+7. Update architecture docs and remove statements that chat/subscription/credits/LLM are deferred.
+8. Run lock, lint, format, Django, migration, OpenAPI, focused, full-test, and Compose gates.
+9. Rebuild the web image and verify imports for `ChatOpenRouter` and directly imported core APIs.
+   Then run `make smoke` to protect the existing service baseline.
+10. Verify Phase 1's Compose test runner still uses the dev-dependency image stage, production
+    database settings, and healthy PostgreSQL/Chroma dependencies while runtime services stay lean.
+11. Build the test image, start `db` and `chroma`, then rerun the PostgreSQL race and two-user
+    direct retriever test through `docker compose --profile test run --rm test ...`. These gates are
+    required, have pytest available, and do not use OpenRouter.
+12. If a rotated OpenRouter key is available, run the synthetic upload/status/query flow with
+    `openrouter/free`. Never echo JWTs or keys. If the free router is unavailable/rate-limited,
+    record it as an external live-smoke limitation; offline acceptance must remain green.
+13. If plan `260830-1608-part-1-endpoint-smoke-tests` is implemented first, reuse compatible helper
+    conventions but keep this plan's synthetic RAG fixture and Part 2 assertions self-contained.
 
 ## Tests Before
 
-- Add/adjust docs and smoke assertions after endpoint behavior exists.
-- Expected initial failure before implementation: OpenAPI schema and README references do not match
-  the new route.
+- Add configuration/Compose/schema assertions before updating docs and environment contracts.
 
 ## Tests After
 
-- `uv run pytest`
-- `uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test`
-- `uv run python manage.py check --settings=config.settings.test`
-- `docker compose config --quiet`
+```bash
+UV_CACHE_DIR=/tmp/ravid-rag-uv-cache uv lock --check
+UV_CACHE_DIR=/tmp/ravid-rag-uv-cache uv sync --all-extras --dev --frozen
+uv run ruff check apps config tests
+uv run ruff format --check apps config tests
+uv run python manage.py check --settings=config.settings.test
+uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test
+uv run python manage.py spectacular --settings=config.settings.test --file /tmp/ravid-openapi.yaml --validate
+uv run pytest tests/accounts tests/documents tests/rag tests/smoke
+uv run pytest
+docker compose config --quiet
+docker compose build web
+docker compose --profile test build test
+docker compose --profile test up -d db chroma
+docker compose --profile test run --rm test pytest --ds=config.settings.production tests/accounts/test_entitlements_postgres.py -q
+docker compose --profile test run --rm test pytest --ds=config.settings.production tests/documents/test_vector_retrieval_chroma.py -q
+make smoke
+```
 
 ## Success Criteria
 
-- [ ] README clearly documents Part 2 query flow and OpenRouter requirement.
-- [ ] Architecture doc lists chat, subscription/credit gate, and RAG responsibilities accurately.
-- [ ] Environment template contains no secrets and includes all new settings.
-- [ ] Full local test suite passes without outbound network calls.
-- [ ] Compose config remains valid after dependency/env changes.
-- [ ] No real secrets, uploaded files, provider responses, or local databases are committed.
+- [x] README provides an accurate synthetic Part 2 reviewer journey.
+- [x] Architecture docs no longer describe implemented Part 2 boundaries as deferred.
+- [x] Free-router default and all RAG settings are documented and forwarded correctly.
+- [x] Provider key is available only to web and is never printed, logged, or committed.
+- [x] Direct dependency, Docker import, OpenAPI, focused, full-test, and Compose gates pass.
+- [x] Real PostgreSQL concurrency and two-user Chroma isolation gates pass.
+- [x] Runtime image remains dev-tool-free; only the profile-gated test target installs pytest.
+- [x] Credentialed smoke uses a rotated key plus synthetic content, or records only the external
+      free-tier availability limitation.
 
 ## Risk Assessment
 
-- Risk: reviewer expects real OpenRouter manual test. Mitigation: README separates mocked CI tests
-  from real provider run and names the exact required credential variable.
-- Risk: Docker dependency install misses the new LLM package. Mitigation: smoke Docker build if time
-  permits; at minimum verify Dockerfile installs the extra containing `langchain-openai`.
-- Risk: docs overpromise bonus behavior. Mitigation: explicitly mark HyDE and retrieval metadata as
-  Part 3 out of scope.
+- Free-tier availability is externally unstable. Keep live smoke separate from offline correctness.
+- Compose expansion can render secrets. Use `docker compose config --quiet` only in recorded output.
+- Documentation can accidentally normalize private assignment material as fixtures. Keep the new
+  fixture synthetic and public-safe.
 
 ## Security Considerations
 
-- Never include real OpenRouter keys in docs, examples, logs, or commits.
-- Curl examples should use `<access-token>` placeholder only.
-- Do not document private uploaded filenames or local absolute paths in public-facing docs.
+- Rotate previously exposed OpenRouter credentials before a live call.
+- Never commit keys, JWTs, uploaded files, provider responses, local databases, or resolved env.
+- Explicitly disclose that selected chunks are sent to OpenRouter/free model providers.

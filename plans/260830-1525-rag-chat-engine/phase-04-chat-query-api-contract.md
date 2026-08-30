@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Chat Query API Contract"
-status: pending
+status: completed
 priority: P1
 dependencies: [1, 2, 3]
 effort: "M"
@@ -9,112 +9,99 @@ effort: "M"
 
 # Phase 4: Chat Query API Contract
 
+## Context Links
+
+- Assignment endpoint: `docs/2026-08-30 R.A.V.I.D.md`
+- Existing DRF pattern: `apps/documents/views.py`, `apps/documents/serializers.py`
+- Root routing: `config/urls.py`
+- OpenAPI smoke: `tests/smoke/test_health.py`
+
 ## Overview
 
-Expose the Part 2 public API endpoint with DRF serializers, owner/auth enforcement, deterministic
-error shapes, and OpenAPI coverage.
+Expose the required authenticated endpoint with the repository's existing APIView/serializer
+patterns, stable safe errors, and explicit OpenAPI coverage.
 
 ## Requirements
 
-- Functional: `POST /api/chat/query/` accepts JSON body with required string `query`.
-- Functional: success response is `200 {"answer": "<generated answer>"}`.
-- Functional: invalid input returns `400 {"error": "<message>"}`.
-- Functional: inactive subscription or insufficient credits returns a client-safe non-2xx response
-  before RAG work.
-- Functional: missing context and provider/config failures return stable safe errors.
-- Non-functional: API tests must not require OpenRouter, Chroma, Redis, or Celery.
+- `POST /api/chat/query/` accepts only a required non-blank string `query`.
+- Success, including deterministic no-context behavior, returns `200 {"answer": "..."}`.
+- The request cannot choose user, document, filter, model, or token budget.
+- API tests remain offline and mock only the Phase 3 service boundary.
 
 ## Architecture
 
-Create a conventional DRF endpoint under `apps.rag`:
+- `ChatQuerySerializer`: trim and validate `query`, maximum 2000 characters.
+- `ChatAnswerSerializer`: document the exact success body.
+- `ChatQueryView(APIView)`: explicit `IsAuthenticated`, local `first_error`, and
+  `RagService().answer_query(user=request.user, query=...)`.
+- `apps.rag.urls`: named `chat-query`; `config.urls`: mount at `api/chat/`.
 
-- `serializers.py`: `ChatQuerySerializer`, `ChatAnswerSerializer`, and `first_error` helper.
-- `views.py`: `ChatQueryView(APIView)` with `IsAuthenticated`.
-- `urls.py`: `path("query/", ChatQueryView.as_view(), name="chat-query")`.
-- `config/urls.py`: `path("api/chat/", include("apps.rag.urls"))`.
-
-Error mapping:
+Error contract:
 
 | Condition | Status | Body |
 | --- | --- | --- |
-| Missing/blank/too-long `query` | 400 | `{"error": "query is required."}` or validation message |
-| Unauthenticated | 401 | DRF default auth body |
-| Inactive entitlement | 402 | `{"error": "Active subscription required."}` |
-| Insufficient credits | 402 | `{"error": "Insufficient daily token credits."}` |
-| No retrieved context | 404 | `{"error": "No indexed context found for this query."}` |
-| OpenRouter not configured | 503 | `{"error": "LLM provider is not configured."}` |
-| Provider/retrieval failure | 503 | `{"error": "Unable to generate answer right now."}` |
+| Missing/blank/too-long query | 400 | `{"error": "..."}` |
+| Unauthenticated | 401 | DRF default authentication body |
+| Missing/inactive subscription | 403 | `{"error": "Active subscription required."}` |
+| Daily quota exhausted | 429 | `{"error": "Insufficient daily token credits."}` |
+| Empty owner-scoped retrieval | 200 | `{"answer": "I could not find relevant information in your uploaded documents."}` |
+| Provider configuration unavailable | 503 | `{"error": "LLM provider is not configured."}` |
+| Known provider/retrieval failure | 503 | `{"error": "Unable to generate answer right now."}` |
 
-Use `402 Payment Required` for subscription and credit failures because the assignment frames the
-gate as subscription and daily credits.
+`402` is intentionally not used: this plan has no payment transaction or payment provider. Empty
+retrieval is not `404` because the endpoint exists and returns a valid grounded no-answer result.
 
 ## Related Code Files
 
-- Create: `apps/rag/serializers.py` - request/response validation.
-- Create: `apps/rag/views.py` - endpoint controller and error mapping.
-- Create: `apps/rag/urls.py` - app route.
+- Create: `apps/rag/serializers.py` - request/response validation and `first_error`.
+- Create: `apps/rag/views.py` - endpoint and domain-error mapping.
+- Create: `apps/rag/urls.py` - application route.
 - Modify: `config/urls.py` - include `api/chat/`.
-- Create: `tests/rag/test_api.py` - public API contract.
-- Modify: `tests/smoke/test_health.py` or add schema test - confirm OpenAPI includes chat route.
+- Create: `tests/rag/test_api.py` - HTTP contract.
+- Modify: `tests/smoke/test_health.py` - assert OpenAPI path/method/schemas.
 
 ## Implementation Steps
 
-1. Add `ChatQuerySerializer` with:
-   - `query = serializers.CharField(required=True, allow_blank=False, max_length=2000)`.
-2. Normalize validation errors with a local `first_error` helper matching the documents app pattern.
-3. Implement `ChatQueryView.post`:
-
-   ```python
-   serializer = ChatQuerySerializer(data=request.data)
-   if not serializer.is_valid():
-       return Response({"error": first_error(serializer)}, status=400)
-   answer = RagService().answer_query(user=request.user, query=serializer.validated_data["query"])
-   return Response({"answer": answer.answer}, status=200)
-   ```
-
-4. Catch account/RAG exceptions explicitly and map them to the status table above.
-5. Register `apps.rag.urls` under `api/chat/` in `config/urls.py`.
-6. Add `@extend_schema` annotations so `/api/schema/` documents request and response examples.
-7. Add API tests with monkeypatched `RagService.answer_query`:
-   - unauthenticated request returns 401;
-   - missing query returns 400;
-   - valid request returns 200 answer;
-   - inactive subscription maps to expected error;
-   - insufficient credits maps to expected error;
-   - no context maps to 404;
-   - provider/config failure maps to 503;
-   - service receives `request.user`, not a user ID from payload.
-8. Add a schema assertion that `POST /api/chat/query/` appears in OpenAPI output.
+1. Add request/response serializers and trim the query during validation.
+2. Implement `ChatQueryView` with explicit `IsAuthenticated`; pass the user object from the JWT
+   request, never a payload identifier.
+3. Catch only known subscription/quota/RAG exceptions and map them to the table above. Do not catch
+   programming errors as normal API responses.
+4. Mount the named route at exactly `/api/chat/query/`.
+5. Add `@extend_schema` request, success, and error response definitions.
+6. Add API tests for 401; missing/blank/whitespace/too-long 400; success 200; subscription 403;
+   quota 429; fixed no-context 200; configuration/provider/retrieval 503; and user propagation.
+7. Assert error bodies do not expose exception text, provider responses, retrieved content, or
+   credentials.
+8. Extend schema tests to inspect `paths["/api/chat/query/"]["post"]`, request schema, and 200
+   response. Run drf-spectacular validation.
 
 ## Tests Before
 
-- Add failing `tests/rag/test_api.py` before implementing endpoint files.
-- Expected initial failure: `reverse("chat-query")` does not resolve.
+- Add failing `tests/rag/test_api.py`; initial `reverse("chat-query")` should not resolve.
 
 ## Tests After
 
-- `uv run pytest tests/rag/test_api.py`
-- `uv run pytest tests/smoke/test_health.py`
+- `uv run pytest tests/rag/test_api.py tests/smoke/test_health.py`
+- `uv run python manage.py spectacular --settings=config.settings.test --file /tmp/ravid-openapi.yaml --validate`
 - `uv run python manage.py check --settings=config.settings.test`
 
 ## Success Criteria
 
-- [ ] `POST /api/chat/query/` route resolves under `/api/chat/query/`.
-- [ ] Endpoint requires JWT auth through existing DRF settings.
-- [ ] Request and response shapes match Part 2 assignment.
-- [ ] Error responses are stable and do not leak provider/internal details.
-- [ ] OpenAPI schema includes the chat endpoint.
+- [x] Endpoint resolves at exactly `/api/chat/query/` and requires JWT auth.
+- [x] Request/success shapes match the assignment.
+- [x] Subscription, quota, no-context, and service-failure behavior matches the table.
+- [x] No request field can influence owner scope or provider configuration.
+- [x] OpenAPI includes and validates the POST operation and its 200 response.
 
 ## Risk Assessment
 
-- Risk: 402 may surprise clients because many APIs use 403 for inactive subscription. Mitigation:
-  document the choice in tests and README; 402 is semantically aligned with subscription/credit
-  failure.
-- Risk: API tests over-mock service behavior. Mitigation: Phase 3 service tests cover orchestration;
-  API tests focus on HTTP contract and exception mapping.
+- `429` can also represent provider rate limits. The local quota response is deterministic; upstream
+  free-tier availability is mapped to generic 503 to avoid conflating ownership.
+- API tests can over-mock orchestration. Keep accounting/retrieval/provider behavior in Phase 1-3
+  tests and HTTP mapping only here.
 
 ## Security Considerations
 
-- Do not accept `user_id`, `document_id`, metadata filter, model name, or token budget from request.
-- Keep all chat API views authenticated.
-- Avoid returning retrieved context in baseline Part 2 response.
+- Authenticate before accessing subscription, vectors, or provider services.
+- Never return retrieved chunks, internal IDs, provider payloads, or stack traces.

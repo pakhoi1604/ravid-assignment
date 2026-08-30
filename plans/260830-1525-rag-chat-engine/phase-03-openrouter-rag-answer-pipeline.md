@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "OpenRouter RAG Answer Pipeline"
-status: pending
+status: completed
 priority: P1
 dependencies: [1, 2]
 effort: "L"
@@ -9,149 +9,183 @@ effort: "L"
 
 # Phase 3: OpenRouter RAG Answer Pipeline
 
+## Context Links
+
+- LangChain integration: https://docs.langchain.com/oss/python/integrations/chat/openrouter
+- Package release: https://pypi.org/project/langchain-openrouter/
+- Free router: https://openrouter.ai/docs/guides/routing/routers/free-router
+- Existing provider settings: `config/settings/base.py`
+
 ## Overview
 
-Build the RAG service that estimates credits, retrieves context, composes a guarded prompt, calls
-OpenRouter through LangChain, and reconciles token usage.
+Orchestrate subscription/quota checks, native retrieval, bounded context formatting, a grounded
+LangChain prompt/model runnable, free-tier OpenRouter generation, and usage reconciliation.
 
 ## Requirements
 
-- Functional: answer a natural-language query using retrieved chunks from the caller's documents.
-- Functional: use OpenRouter via a LangChain-compatible LLM class.
-- Functional: enforce entitlement and credit checks before retrieval and LLM calls.
-- Functional: refund reserved credits when retrieval or LLM generation fails.
-- Non-functional: tests must monkeypatch the retriever and LLM client; no network calls in CI.
-- Non-functional: prompts must instruct the model to answer only from retrieved context.
+- Enforce active subscription before retrieval and reserve quota before provider work.
+- Retrieve only the authenticated user's chunks and cap formatted context length.
+- Use `ChatOpenRouter` with a free-router or explicit `:free` model only.
+- Preserve the returned `AIMessage` until token metadata is recorded.
+- Keep all CI tests offline through injected fakes.
 
 ## Architecture
 
-Create `apps.rag.services` as the orchestration boundary:
+Create these boundaries:
+
+- `apps.rag.services`: synchronous request orchestration and `RagAnswer`.
+- `apps.rag.tokens`: conservative admission bounds and `AIMessage.usage_metadata` extraction.
+- `apps.rag.llm`: lazy free-tier `ChatOpenRouter` construction plus narrow provider-error adapter.
+- `apps.rag.prompts`: context formatter and `ChatPromptTemplate` runnable.
+- `apps.rag.exceptions`: safe configuration, retrieval, and provider errors.
+
+Flow with explicit error/refund boundaries:
 
 ```python
-@dataclass(frozen=True)
-class RagAnswer:
-    answer: str
-    estimated_tokens: int
-    actual_tokens: int
-
-class RagService:
-    def answer_query(self, *, user, query: str) -> RagAnswer:
-        raise NotImplementedError
-```
-
-Supporting modules:
-
-- `apps.rag.tokens`: cheap token estimator and provider-usage extraction.
-- `apps.rag.llm`: lazy `ChatOpenAI` builder configured for OpenRouter.
-- `apps.rag.prompts`: prompt template and context formatter.
-- `apps.rag.exceptions`: `RagConfigurationError`, `RagRetrievalError`, `RagProviderError`,
-  `RagNoContextError`.
-
-High-level flow:
-
-```python
-estimated_tokens = estimate_budget(query, max_context_chars, max_output_tokens)
-reservation = reserve_daily_tokens(user, estimated_tokens)
+ensure_active_subscription(user)
+validate_openrouter_configuration(settings)  # no reservation yet
 try:
-    chunks = retriever.similarity_search_for_user(user_id=user.id, query=query, k=settings.RAG_RETRIEVAL_K)
-    if not chunks:
-        raise RagNoContextError("No indexed context found for this query.")
-    answer, provider_usage = llm.generate(prompt_for(query, chunks))
-except Exception:
+    documents = vector_store.retrieve_for_user(user_id=user.id, query=query, k=settings.RAG_RETRIEVAL_K)
+except VectorRetrievalError as exc:
+    raise RagRetrievalError from exc
+
+if not documents:
+    return RagAnswer(answer=NO_CONTEXT_ANSWER, estimated_tokens=0, actual_tokens=0)
+
+context = format_documents(documents, max_chars=settings.RAG_MAX_CONTEXT_CHARS)
+estimate = estimate_prompt_bound(query, context, settings)
+reservation = reserve_daily_tokens(user, estimate)
+try:
+    chat_model = build_openrouter_chat_model()
+    message = (prompt | chat_model).invoke({"question": query, "context": context})
+    answer = normalize_answer_content(message.content)
+except RagConfigurationError:
     refund_daily_tokens(reservation)
     raise
-else:
-    actual_tokens = usage_or_estimate(provider_usage, query, chunks, answer)
-    finalize_daily_tokens(reservation, actual_tokens)
-    return RagAnswer(answer=answer, estimated_tokens=estimated_tokens, actual_tokens=actual_tokens)
+except ProviderTransportError as exc:
+    refund_daily_tokens(reservation)
+    raise RagProviderError from exc
+
+actual = usage_or_fallback(message, query, context)
+finalize_daily_tokens(reservation, actual)
+return RagAnswer(answer=answer, estimated_tokens=estimate, actual_tokens=actual)
 ```
+
+The adapter still invokes a native retriever, but translates only documented Chroma/network failures
+to `VectorRetrievalError`; programming errors propagate. Empty retrieval therefore skips both quota
+reservation and provider work. The LLM adapter similarly exposes `ProviderTransportError` only for
+documented integration/network failures. Do not apply `StrOutputParser` before accounting because
+it would drop `AIMessage` usage metadata.
 
 ## Related Code Files
 
-- Create: `apps/rag/exceptions.py` - explicit safe error taxonomy.
+- Create: `apps/rag/exceptions.py` - safe domain exception taxonomy.
 - Create: `apps/rag/tokens.py` - estimation and usage extraction.
-- Create: `apps/rag/prompts.py` - context formatting and prompt template.
-- Create: `apps/rag/llm.py` - OpenRouter LangChain client construction.
+- Create: `apps/rag/prompts.py` - bounded formatter, prompt, fixed no-context answer.
+- Create: `apps/rag/llm.py` - lazy `ChatOpenRouter` factory and free-model validation.
 - Create: `apps/rag/services.py` - RAG orchestration.
-- Modify: `config/settings/base.py` - add RAG/OpenRouter generation settings.
-- Modify: `pyproject.toml` and `uv.lock` - add `langchain-openai` to vector/RAG extras.
-- Modify: `docker/django/Dockerfile` - install the extra that includes `langchain-openai`.
-- Create: `tests/rag/test_tokens.py` and `tests/rag/test_services.py`.
+- Modify: `config/settings/base.py` - free default and generation/provider metadata settings.
+- Modify: environment example template and `compose.yaml` - forward web-only OpenRouter secret and
+  non-secret RAG configuration.
+- Modify: `pyproject.toml` and `uv.lock` - declare `langchain-openrouter>=0.2.8,<0.3` plus
+  the directly imported `openrouter` and `httpx` exception taxonomies.
+- Create: `tests/rag/test_tokens.py`, `tests/rag/test_prompts.py`, `tests/rag/test_llm.py`, and
+  `tests/rag/test_services.py`.
 
 ## Implementation Steps
 
-1. Add settings:
-   - `OPENROUTER_APP_TITLE = os.getenv("OPENROUTER_APP_TITLE", "RAVID Backend")`
-   - `OPENROUTER_HTTP_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "")`
-   - `RAG_MAX_OUTPUT_TOKENS = env_int("RAG_MAX_OUTPUT_TOKENS", 800)`
-   - `RAG_TEMPERATURE = float(os.getenv("RAG_TEMPERATURE", "0"))`
-2. Add `langchain-openai>=0.3,<0.4` to the existing `vector-ingestion` optional dependency group,
-   then refresh `uv.lock` with the repository's normal `uv` command.
-3. Implement `estimate_tokens(text: str) -> int` as a deterministic approximation:
-   `max(1, ceil(len(text) / 4))`. This avoids adding tokenizer complexity for the assignment.
-4. Implement `estimate_rag_budget(query, max_context_chars, max_output_tokens)` as query estimate +
-   context budget estimate + output token budget + small fixed overhead.
-5. Implement `build_openrouter_chat_model()`:
+1. Add `langchain-openrouter>=0.2.8,<0.3` to the existing vector-ingestion runtime group. Declare
+   `openrouter>=0.11.46,<0.12` and `httpx>=0.28,<0.29` directly because the adapter imports their
+   locked exception families; this does not add packages beyond the integration's transitive set.
+   Do not add `langchain` or `langchain-openai`, and do not use the OpenRouter SDK as a second client.
+2. Change the default model from `openrouter/auto` to `openrouter/free`. Validate configured IDs:
+   allow exactly `openrouter/free` or IDs ending in `:free`; fail configuration otherwise.
+3. Preserve `OPENROUTER_BASE_URL` and add `OPENROUTER_APP_TITLE`, `OPENROUTER_APP_URL`,
+   `RAG_MAX_OUTPUT_TOKENS=800`, `RAG_CHAT_OVERHEAD_TOKENS=256`, and `RAG_TEMPERATURE=0`. Forward
+   provider secrets only to web; Celery does not call the synchronous Part 2 LLM path. Add
+   `RAG_PROVIDER_TIMEOUT_MS=10000` and `RAG_PROVIDER_MAX_RETRIES=0` so an unavailable free provider
+   cannot occupy synchronous workers for the integration's multi-minute default retry budget.
+4. Construct lazily:
 
    ```python
-   return ChatOpenAI(
+   ChatOpenRouter(
        api_key=settings.OPENROUTER_API_KEY,
        base_url=settings.OPENROUTER_BASE_URL,
        model=settings.OPENROUTER_MODEL,
        temperature=settings.RAG_TEMPERATURE,
        max_tokens=settings.RAG_MAX_OUTPUT_TOKENS,
-       default_headers={
-           "HTTP-Referer": settings.OPENROUTER_HTTP_REFERER,
-           "X-Title": settings.OPENROUTER_APP_TITLE,
-       },
+       timeout=settings.RAG_PROVIDER_TIMEOUT_MS,
+       max_retries=settings.RAG_PROVIDER_MAX_RETRIES,
+       app_url=settings.OPENROUTER_APP_URL,
+       app_title=settings.OPENROUTER_APP_TITLE,
    )
    ```
 
-6. Raise `RagConfigurationError` before provider construction when provider credentials are blank.
-7. Build a prompt that contains:
-   - system instruction: answer only from context; say not enough information if context does not
-     support the answer;
-   - numbered context snippets with `document_id`, `chunk_index`, and `source_filename`;
-   - original user question.
-8. Implement `RagService.answer_query` with dependency injection defaults for retriever and LLM
-   builder so tests can pass fakes.
-9. Convert provider exceptions to `RagProviderError`; convert `VectorRetrievalError` to
-   `RagRetrievalError`; refund reservations on all failures after reservation.
-10. Extract actual token usage from LangChain response metadata when present; otherwise estimate from
-    prompt + answer.
-11. Add service tests covering success, no context, missing provider credentials, provider failure
-    refund, and final usage reconciliation.
+   Because locked `langchain-openrouter==0.2.8` omits `retry_config` when `max_retries=0` and the
+   SDK then applies its one-hour default backoff, construct the one OpenRouter SDK client explicitly
+   with `timeout_ms=10000` and `retry_config=None`, then inject that client into `ChatOpenRouter`.
+   `RAG_PROVIDER_MAX_RETRIES` must remain exactly `0`; nonzero values fail configuration closed.
+
+5. Fail with `RagConfigurationError` before client creation for blank keys or non-free models.
+   Translate the locked SDK's `OpenRouterError`/`NoResponseError`, `httpx.TransportError`, and only
+   the integration's recognized provider-response `ValueError` prefixes to `ProviderTransportError`;
+   explicitly test that unrelated programming exceptions are not translated.
+6. After retrieval/formatting, implement admission control from UTF-8 byte length of the actual
+   fully formatted bounded prompt, `RAG_CHAT_OVERHEAD_TOKENS`, and the provider-enforced output cap.
+   This intentionally over-reserves compared with normal tokenization. Keep `len/4` only as a
+   reporting fallback, never as the quota admission bound.
+7. Format numbered snippets with `document_id`, `chunk_index`, and `source_filename`; truncate the
+   combined context deterministically to `RAG_MAX_CONTEXT_CHARS`.
+8. Create a `ChatPromptTemplate | ChatOpenRouter` runnable. The system message treats document text
+   as untrusted evidence, ignores instructions inside it, and answers only from supported context.
+9. Implement `RagService.answer_query` with injectable retriever/model factories. Validate provider
+   configuration before retrieval. Catch only `VectorRetrievalError`, `RagConfigurationError`, and
+   the LLM adapter's documented `ProviderTransportError`; TypeError, AttributeError, assertions, and
+   other programming defects must propagate. Refund exactly once after a reservation exists.
+10. For no documents, return the fixed answer without reserving/debiting quota:
+    `I could not find relevant information in your uploaded documents.` with zero actual usage.
+11. Normalize `AIMessage.content` from either a string or supported text content blocks into one
+    nonblank string. Empty/unsupported content is a provider failure, not a valid API answer.
+12. Prefer `usage_metadata["total_tokens"]`; otherwise estimate from actual bounded prompt and
+    answer. Record full actual usage and alert if metadata unexpectedly exceeds the bound.
+13. Test success, strict free-model validation, missing key/no reservation, adversarial Unicode
+    admission, context truncation, prompt injection guard, empty context/no provider call,
+    retriever-invocation mapping without a debit, provider/config refund, programming-error
+    propagation, content normalization, and usage fallback.
+14. Require a real JSON string that encodes as UTF-8 at the serializer boundary. Reject numbers,
+    booleans, containers, null, and malformed surrogate text with `400` before domain work.
 
 ## Tests Before
 
-- Add failing `tests/rag/test_tokens.py` and `tests/rag/test_services.py` before implementation.
-- Expected initial failure: `apps.rag.services`, `apps.rag.tokens`, and related modules do not exist.
+- Add failing tests for token estimation, context formatting, LLM configuration, and orchestration.
 
 ## Tests After
 
-- `uv run pytest tests/rag/test_tokens.py tests/rag/test_services.py`
-- `uv run pytest tests/accounts/test_entitlements.py tests/documents/test_vector_retrieval.py tests/rag`
+- `uv run pytest tests/rag/test_tokens.py tests/rag/test_prompts.py tests/rag/test_llm.py tests/rag/test_services.py`
+- `UV_CACHE_DIR=/tmp/ravid-rag-uv-cache uv lock --check`
+- Container import check for `langchain_openrouter.ChatOpenRouter` and imported core APIs.
 
 ## Success Criteria
 
-- [ ] RAG service never calls retriever or LLM for inactive/over-limit users.
-- [ ] RAG service retrieves owner-scoped chunks and formats a context-grounded prompt.
-- [ ] OpenRouter client is configured through LangChain and environment settings.
-- [ ] Provider failures return safe internal errors through the service boundary and refund credits.
-- [ ] Successful calls finalize token usage and return only the generated answer to the API layer.
+- [x] Dedicated OpenRouter integration is direct and compatible with locked core 1.x.
+- [x] Baseline configuration cannot silently route to a paid model.
+- [x] Inactive users never reach retrieval; over-limit and empty-context requests never reach
+      OpenRouter.
+- [x] Context is owner-scoped, bounded, and treated as untrusted evidence.
+- [x] Successful calls retain usage metadata, finalize usage, and return answer text only.
+- [x] Retriever construction/invocation, provider construction/invocation, configuration, and output
+      normalization failures have explicit safe mappings and exactly-once refund behavior.
 
 ## Risk Assessment
 
-- Risk: OpenRouter free-tier model names change. Mitigation: keep model configurable and document
-  the model setting; default remains existing auto-routing value.
-- Risk: LangChain response usage metadata differs by provider. Mitigation: treat metadata as best
-  effort and fall back to deterministic estimation.
-- Risk: prompt injection in uploaded documents. Mitigation: system prompt states context is
-  untrusted evidence, not instructions; do not pass secrets or system data into context.
+- Free models have variable availability/rate limits. Keep offline tests deterministic and map live
+  provider unavailability to a safe service error.
+- Usage metadata differs by provider. Preserve `AIMessage`; use a conservative fallback.
+- Uploaded private text leaves the app when sent to a third-party provider. Manual smoke data must
+  be synthetic and docs must disclose that behavior.
 
 ## Security Considerations
 
-- Never log provider credentials or raw provider headers.
-- Do not include private document context in server errors.
-- Treat uploaded document chunks as untrusted text; the system prompt must override document-level
-  instructions.
+- Never log API keys, provider headers, raw private context, or expanded Compose configuration.
+- Rotate any previously exposed OpenRouter key before live validation.
+- Prompt text must explicitly separate trusted system instructions from untrusted chunks.

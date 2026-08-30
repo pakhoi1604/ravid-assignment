@@ -6,6 +6,9 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from apps.accounts.models import Subscription
 
 
 class Command(BaseCommand):
@@ -32,27 +35,47 @@ class Command(BaseCommand):
         created_count = 0
         updated_count = 0
 
-        for account in accounts:
-            username = account["username"]
-            defaults = {
-                "email": account.get("email", ""),
-                "is_staff": False,
-                "is_superuser": False,
-                "is_active": account.get("is_active", True),
-            }
-            user, created = user_model.objects.get_or_create(username=username, defaults=defaults)
+        with transaction.atomic():
+            for account in accounts:
+                username = account["username"]
+                defaults = {
+                    "email": account.get("email", ""),
+                    "is_staff": False,
+                    "is_superuser": False,
+                    "is_active": account.get("is_active", True),
+                }
+                user, created = user_model.objects.get_or_create(
+                    username=username,
+                    defaults=defaults,
+                )
 
-            for field, value in defaults.items():
-                setattr(user, field, value)
-            user.set_password(account["password"])
-            user.save()
+                for field, value in defaults.items():
+                    setattr(user, field, value)
+                user.set_password(account["password"])
+                user.save()
 
-            if created:
-                created_count += 1
-                self.stdout.write(self.style.SUCCESS(f"Created test account: {username}"))
-            else:
-                updated_count += 1
-                self.stdout.write(self.style.WARNING(f"Updated test account: {username}"))
+                subscription_status = (
+                    Subscription.Status.ACTIVE
+                    if account["subscription_active"]
+                    else Subscription.Status.INACTIVE
+                )
+                Subscription.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        "status": subscription_status,
+                        "daily_token_limit": account.get(
+                            "daily_token_limit",
+                            settings.DEFAULT_DAILY_TOKEN_LIMIT,
+                        ),
+                    },
+                )
+
+                if created:
+                    created_count += 1
+                    self.stdout.write(self.style.SUCCESS(f"Created test account: {username}"))
+                else:
+                    updated_count += 1
+                    self.stdout.write(self.style.WARNING(f"Updated test account: {username}"))
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -92,5 +115,16 @@ def load_accounts(path: Path) -> list[dict[str, Any]]:
                 raise CommandError(f"Test account #{index} {field} must be a boolean.")
         if account.get("is_staff") or account.get("is_superuser"):
             raise CommandError(f"Test account #{index} must not be privileged.")
+        if not isinstance(account.get("subscription_active"), bool):
+            raise CommandError(f"Test account #{index} subscription_active must be a boolean.")
+        daily_token_limit = account.get("daily_token_limit")
+        if daily_token_limit is not None and (
+            isinstance(daily_token_limit, bool)
+            or not isinstance(daily_token_limit, int)
+            or daily_token_limit <= 0
+        ):
+            raise CommandError(
+                f"Test account #{index} daily_token_limit must be a positive integer."
+            )
 
     return accounts

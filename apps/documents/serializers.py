@@ -27,6 +27,23 @@ class UploadSerializer(serializers.Serializer):
         return uploaded_file
 
 
+class UploadResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    document_id = serializers.UUIDField()
+    task_id = serializers.UUIDField()
+
+
+class StatusResponseSerializer(serializers.Serializer):
+    task_id = serializers.UUIDField()
+    status = serializers.ChoiceField(choices=IngestionJob.Status.choices)
+    message = serializers.CharField(required=False)
+    error = serializers.CharField(required=False)
+
+
+class DocumentErrorSerializer(serializers.Serializer):
+    error = serializers.CharField()
+
+
 def format_status_response(job: IngestionJob) -> dict[str, str]:
     status = job.status
     if status == IngestionJob.Status.PENDING:

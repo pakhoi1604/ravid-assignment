@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: docker/django/Dockerfile
+      target: runtime
     image: ravid-app:local
     command: >
       sh -c "python manage.py migrate --noinput &&
@@ -23,7 +24,17 @@ services:
       CHROMA_PORT: ${CHROMA_PORT:-8000}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
+      OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-RAVID Backend}
+      OPENROUTER_APP_URL: ${OPENROUTER_APP_URL:-}
+      DEFAULT_DAILY_TOKEN_LIMIT: ${DEFAULT_DAILY_TOKEN_LIMIT:-20000}
+      RAG_RETRIEVAL_K: ${RAG_RETRIEVAL_K:-4}
+      RAG_MAX_CONTEXT_CHARS: ${RAG_MAX_CONTEXT_CHARS:-6000}
+      RAG_MAX_OUTPUT_TOKENS: ${RAG_MAX_OUTPUT_TOKENS:-800}
+      RAG_CHAT_OVERHEAD_TOKENS: ${RAG_CHAT_OVERHEAD_TOKENS:-256}
+      RAG_TEMPERATURE: ${RAG_TEMPERATURE:-0}
+      RAG_PROVIDER_TIMEOUT_MS: ${RAG_PROVIDER_TIMEOUT_MS:-10000}
+      RAG_PROVIDER_MAX_RETRIES: ${RAG_PROVIDER_MAX_RETRIES:-0}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-25}
       VECTOR_CHUNK_SIZE: ${VECTOR_CHUNK_SIZE:-1000}
@@ -48,6 +59,31 @@ services:
       timeout: 5s
       retries: 12
 
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+      target: test
+    image: ravid-app:test
+    command: pytest
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      SECRET_KEY: ${SECRET_KEY:-change-me-for-local-review-only}
+      POSTGRES_DB: ${POSTGRES_DB:-ravid}
+      POSTGRES_USER: ${POSTGRES_USER:-ravid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-review-only}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      CHROMA_HOST: ${CHROMA_HOST:-chroma}
+      CHROMA_PORT: ${CHROMA_PORT:-8000}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+    depends_on:
+      db:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+
   celery:
     image: ravid-app:local
     command: celery -A config worker --loglevel=info --hostname=celery@%h --autoscale=2,1 --max-tasks-per-child=5
@@ -64,9 +100,6 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CHROMA_HOST: ${CHROMA_HOST:-chroma}
       CHROMA_PORT: ${CHROMA_PORT:-8000}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-25}
       VECTOR_CHUNK_SIZE: ${VECTOR_CHUNK_SIZE:-1000}

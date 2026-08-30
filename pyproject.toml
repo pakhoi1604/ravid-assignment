@@ -19,9 +19,13 @@ dependencies = [
 [project.optional-dependencies]
 vector-ingestion = [
     "chromadb==1.5.9",
+    "httpx>=0.28,<0.29",
     "langchain-chroma>=1.1.0,<2",
+    "langchain-core>=1.6,<2",
     "langchain-huggingface>=1.2.2,<2",
+    "langchain-openrouter>=0.2.8,<0.3",
     "langchain-text-splitters>=1.1.2,<2",
+    "openrouter>=0.11.46,<0.12",
     "pypdf>=6.0,<7",
     "sentence-transformers>=5.2,<6",
     "torch>=2.13,<2.14",

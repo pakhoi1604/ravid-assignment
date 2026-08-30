@@ -14,8 +14,7 @@ def test_split_text_preserves_requested_overlap_for_long_text():
 
     assert len(chunks) > 1
     assert all(
-        previous[-3:] == current[:3]
-        for previous, current in zip(chunks, chunks[1:], strict=False)
+        previous[-3:] == current[:3] for previous, current in zip(chunks, chunks[1:], strict=False)
     )
 
 

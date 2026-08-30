@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -17,7 +17,22 @@ RUN apt-get update \
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
+
+FROM base AS runtime
+
 RUN uv sync --frozen --no-dev --extra vector-ingestion --no-install-project
+
+COPY . .
+RUN mkdir -p /app/media /app/staticfiles /home/app/.cache/huggingface \
+    && chown -R app:app /app /home/app/.cache
+
+USER app
+
+ENTRYPOINT ["/app/docker/django/entrypoint.sh"]
+
+FROM base AS test
+
+RUN uv sync --frozen --all-extras --dev --no-install-project
 
 COPY . .
 RUN mkdir -p /app/media /app/staticfiles /home/app/.cache/huggingface \

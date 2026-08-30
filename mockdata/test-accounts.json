@@ -5,14 +5,18 @@
       "email": "reviewer@example.com",
       "password": "reviewer-password-123",
       "is_staff": false,
-      "is_superuser": false
+      "is_superuser": false,
+      "subscription_active": true,
+      "daily_token_limit": 20000
     },
     {
       "username": "reviewer_alt",
       "email": "reviewer-alt@example.com",
       "password": "reviewer-alt-password-123",
       "is_staff": false,
-      "is_superuser": false
+      "is_superuser": false,
+      "subscription_active": true,
+      "daily_token_limit": 20000
     }
   ]
 }

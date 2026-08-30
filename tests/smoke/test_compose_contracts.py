@@ -53,6 +53,43 @@ def test_application_image_installs_vector_ingestion_dependencies():
     assert "uv sync --frozen --no-dev --extra vector-ingestion --no-install-project" in dockerfile
 
 
+def test_runtime_and_test_images_keep_dev_dependencies_separate():
+    services = load_compose()["services"]
+    dockerfile = Path("docker/django/Dockerfile").read_text()
+
+    assert services["web"]["build"]["target"] == "runtime"
+    assert services["test"]["profiles"] == ["test"]
+    assert services["test"]["build"]["target"] == "test"
+    assert services["test"]["environment"]["DJANGO_SETTINGS_MODULE"] == (
+        "config.settings.production"
+    )
+    assert "FROM base AS runtime" in dockerfile
+    assert "FROM base AS test" in dockerfile
+    assert "uv sync --frozen --all-extras --dev --no-install-project" in dockerfile
+
+
+def test_openrouter_secret_is_forwarded_only_to_web():
+    services = load_compose()["services"]
+
+    assert "OPENROUTER_API_KEY" in services["web"]["environment"]
+    for service_name in ("celery", "flower", "test"):
+        assert "OPENROUTER_API_KEY" not in services[service_name]["environment"]
+
+
+def test_web_forwards_free_router_and_rag_defaults():
+    web_environment = load_compose()["services"]["web"]["environment"]
+
+    assert web_environment["OPENROUTER_MODEL"] == "${OPENROUTER_MODEL:-openrouter/free}"
+    assert web_environment["DEFAULT_DAILY_TOKEN_LIMIT"] == "${DEFAULT_DAILY_TOKEN_LIMIT:-20000}"
+    assert web_environment["RAG_RETRIEVAL_K"] == "${RAG_RETRIEVAL_K:-4}"
+    assert web_environment["RAG_MAX_CONTEXT_CHARS"] == "${RAG_MAX_CONTEXT_CHARS:-6000}"
+    assert web_environment["RAG_MAX_OUTPUT_TOKENS"] == "${RAG_MAX_OUTPUT_TOKENS:-800}"
+    assert web_environment["RAG_CHAT_OVERHEAD_TOKENS"] == ("${RAG_CHAT_OVERHEAD_TOKENS:-256}")
+    assert web_environment["RAG_TEMPERATURE"] == "${RAG_TEMPERATURE:-0}"
+    assert web_environment["RAG_PROVIDER_TIMEOUT_MS"] == "${RAG_PROVIDER_TIMEOUT_MS:-10000}"
+    assert web_environment["RAG_PROVIDER_MAX_RETRIES"] == ("${RAG_PROVIDER_MAX_RETRIES:-0}")
+
+
 def test_chroma_image_runs_as_non_root_user():
     dockerfile = Path("docker/chroma/Dockerfile").read_text()
 
@@ -68,6 +105,17 @@ def test_chroma_client_and_server_versions_are_aligned():
     assert "chromadb==1.5.9" in vector_dependencies
     assert services["chroma"]["image"] == "ravid-chroma:1.5.9"
     assert dockerfile.startswith("FROM chromadb/chroma:1.5.9\n")
+
+
+def test_imported_runtime_packages_are_direct_dependencies():
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+    vector_dependencies = pyproject["project"]["optional-dependencies"]["vector-ingestion"]
+
+    assert any(dependency.startswith("langchain-core") for dependency in vector_dependencies)
+    assert any(dependency.startswith("langchain-openrouter") for dependency in vector_dependencies)
+    assert any(dependency.startswith("openrouter") for dependency in vector_dependencies)
+    assert any(dependency.startswith("httpx") for dependency in vector_dependencies)
+    assert not any(dependency.startswith("langchain>=") for dependency in vector_dependencies)
 
 
 def test_required_dockerfiles_are_not_git_ignored():
