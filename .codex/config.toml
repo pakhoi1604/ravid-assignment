@@ -1,0 +1,11 @@
+
+# --- ck-managed-agents-start ---
+[agents.code_reviewer]
+description = "Comprehensive code review with scout-based edge case detection. Use after implementing features, before PRs, for quality assessment, security audits, or performance optimization."
+config_file = "agents/code_reviewer.toml"
+# --- ck-managed-agents-end ---
+
+# --- ck-managed-features-start ---
+[features]
+hooks = true
+# --- ck-managed-features-end ---

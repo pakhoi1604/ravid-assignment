@@ -1,0 +1,66 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+coverage
+
+# production
+build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# semantic-release
+.nyc_output
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# flutter
+.dart_tool
+build
+GoogleService-Info.plist
+
+.mcp.json
+.gemini/*
+commands/**/meta/*
+commands/git/release
+skills/ai-multimodal/assets/demo-*
+settings.local.json
+session-state/
+
+# ClaudeKit runtime / máy-cụ-thể — KHÔNG commit (giữ Full kit, chỉ loại phần này)
+metadata.json
+agent-memory/
+hooks/.logs/
+**/.coverage
+# Python bytecode/cache — nhúng path tuyệt đối của máy trong .pyc → tuyệt đối không commit
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Skills dùng chung nằm ở .agents/ — KHÔNG commit bản trong .claude (tránh trùng 20MB)
+skills/

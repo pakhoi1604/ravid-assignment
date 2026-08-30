@@ -1,0 +1,9 @@
+# Rác runtime/máy-cụ-thể trong bộ skills chung — KHÔNG commit.
+# .coverage của Python nhúng đường dẫn tuyệt đối → tuyệt đối loại.
+**/.coverage
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+*.log

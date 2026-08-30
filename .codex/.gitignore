@@ -1,0 +1,11 @@
+# Rác runtime/máy-cụ-thể trong cấu hình Codex — KHÔNG commit.
+*.bak
+**/.coverage
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+.logs/
+session-state/
+*.log
