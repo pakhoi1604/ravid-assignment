@@ -86,7 +86,8 @@ and worker containers.
 The `vector-ingestion` extra installs only the LangChain components Part 1 imports:
 `langchain-text-splitters`, `langchain-chroma`, and `langchain-huggingface`. The unused `langchain`
 umbrella package is intentionally omitted; shared packages such as `langchain-core` remain
-transitive until application source imports them directly.
+transitive until application source imports them directly. Torch resolves from the official
+PyTorch CPU-only index because document embeddings do not require a GPU runtime.
 
 Load the same test accounts locally with:
 

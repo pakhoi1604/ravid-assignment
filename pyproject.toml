@@ -24,6 +24,7 @@ vector-ingestion = [
     "langchain-text-splitters>=1.1.2,<2",
     "pypdf>=6.0,<7",
     "sentence-transformers>=5.2,<6",
+    "torch>=2.13,<2.14",
 ]
 
 [dependency-groups]
@@ -38,6 +39,14 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"

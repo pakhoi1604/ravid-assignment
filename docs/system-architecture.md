@@ -46,7 +46,9 @@ document metadata so later retrieval can enforce owner isolation.
 Part 1 depends on modular LangChain packages only: `langchain-text-splitters` for chunking,
 `langchain-huggingface` for local embeddings, and `langchain-chroma` for vector storage. The
 umbrella `langchain` package is not installed because Part 1 does not import it. Shared
-`langchain-core` functionality remains transitive until a later module imports it directly.
+`langchain-core` functionality remains transitive until a later module imports it directly. Torch
+is pinned to the official CPU-only package index, preserving local embeddings without CUDA runtime
+packages and reducing the shared application image from 8.82 GB to 1.19 GB.
 
 ## Public Surface
 
