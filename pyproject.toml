@@ -1,0 +1,63 @@
+[project]
+name = "ravid"
+version = "0.1.0"
+description = "RAVID document RAG backend foundation"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "celery[redis]>=5.5,<5.6",
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.16,<3.17",
+    "djangorestframework-simplejwt>=5.5,<6",
+    "drf-spectacular>=0.28,<0.29",
+    "flower>=2.0,<3",
+    "gunicorn>=23,<24",
+    "psycopg[binary]>=3.2,<3.3",
+    "python-json-logger>=3.3,<4",
+]
+
+[project.optional-dependencies]
+rag = [
+    "chromadb>=1.0,<2",
+    "langchain>=0.3,<0.4",
+    "langchain-chroma>=0.2,<0.3",
+    "langchain-huggingface>=0.3,<0.4",
+    "langchain-openai>=0.3,<0.4",
+    "pypdf>=6.0,<7",
+    "sentence-transformers>=5.0,<6",
+]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8,<2",
+    "pip-audit>=2.9,<3",
+    "pytest>=8.4,<9",
+    "pytest-cov>=6.2,<7",
+    "pytest-django>=4.11,<5",
+    "ruff>=0.12,<0.13",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "--strict-markers --disable-warnings"
+
+[tool.coverage.run]
+source = ["apps", "config"]
+branch = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "DJ"]
+ignore = ["DJ008"]
+
+[tool.ruff.lint.per-file-ignores]
+"config/settings/*.py" = ["F403", "F405"]
+"tests/**/*.py" = ["DJ007"]

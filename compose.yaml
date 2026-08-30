@@ -1,0 +1,149 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+    image: ravid-app:local
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2"
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      SECRET_KEY: ${SECRET_KEY:-change-me-for-local-review-only}
+      DEBUG: ${DEBUG:-false}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,web}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8000}
+      POSTGRES_DB: ${POSTGRES_DB:-ravid}
+      POSTGRES_USER: ${POSTGRES_USER:-ravid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-review-only}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CHROMA_HOST: ${CHROMA_HOST:-chroma}
+      CHROMA_PORT: ${CHROMA_PORT:-8000}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-25}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-1000}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-150}
+      RAG_RETRIEVAL_TOP_K: ${RAG_RETRIEVAL_TOP_K:-5}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - media_data:/app/media
+      - hf_cache:/home/app/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  celery:
+    image: ravid-app:local
+    command: celery -A config worker --loglevel=info --hostname=celery@%h
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      SECRET_KEY: ${SECRET_KEY:-change-me-for-local-review-only}
+      DEBUG: ${DEBUG:-false}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,web}
+      POSTGRES_DB: ${POSTGRES_DB:-ravid}
+      POSTGRES_USER: ${POSTGRES_USER:-ravid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-review-only}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CHROMA_HOST: ${CHROMA_HOST:-chroma}
+      CHROMA_PORT: ${CHROMA_PORT:-8000}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-25}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-1000}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-150}
+      RAG_RETRIEVAL_TOP_K: ${RAG_RETRIEVAL_TOP_K:-5}
+    volumes:
+      - media_data:/app/media
+      - hf_cache:/home/app/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --timeout=5 >/dev/null"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ravid}
+      POSTGRES_USER: ${POSTGRES_USER:-ravid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-review-only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  chroma:
+    build:
+      context: .
+      dockerfile: docker/chroma/Dockerfile
+    image: ravid-chroma:1.0.15
+    volumes:
+      - chroma_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  flower:
+    image: ravid-app:local
+    command: celery -A config flower --port=5555 --basic-auth=${FLOWER_BASIC_AUTH:-ravid:change-me}
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      SECRET_KEY: ${SECRET_KEY:-change-me-for-local-review-only}
+      POSTGRES_DB: ${POSTGRES_DB:-ravid}
+      POSTGRES_USER: ${POSTGRES_USER:-ravid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-review-only}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CHROMA_HOST: ${CHROMA_HOST:-chroma}
+      CHROMA_PORT: ${CHROMA_PORT:-8000}
+    ports:
+      - "127.0.0.1:5555:5555"
+    depends_on:
+      celery:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:
+  chroma_data:
+  hf_cache:
