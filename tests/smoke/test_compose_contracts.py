@@ -1,4 +1,5 @@
 import subprocess
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -56,6 +57,17 @@ def test_chroma_image_runs_as_non_root_user():
     dockerfile = Path("docker/chroma/Dockerfile").read_text()
 
     assert "\nUSER chroma\n" in dockerfile
+
+
+def test_chroma_client_and_server_versions_are_aligned():
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+    vector_dependencies = pyproject["project"]["optional-dependencies"]["vector-ingestion"]
+    services = load_compose()["services"]
+    dockerfile = Path("docker/chroma/Dockerfile").read_text()
+
+    assert "chromadb==1.5.9" in vector_dependencies
+    assert services["chroma"]["image"] == "ravid-chroma:1.5.9"
+    assert dockerfile.startswith("FROM chromadb/chroma:1.5.9\n")
 
 
 def test_required_dockerfiles_are_not_git_ignored():
