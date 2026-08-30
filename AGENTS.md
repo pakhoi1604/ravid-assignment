@@ -13,10 +13,6 @@ When instructions conflict, follow this order:
 3. The applicable files under `.claude/rules/`.
 4. Existing project documentation, accepted plans, tests, and established code patterns.
 
-Use the assignment PDF as the source of truth for assessment requirements:
-`2026-08-30 R.A.V.I.D. Assessment & Evaluation for Back End Candidates.pdf`.
-Do not copy its detailed requirements into this file.
-
 ## General Working Rules
 
 - Read the relevant rules, documentation, and nearby code before making changes.
@@ -53,15 +49,16 @@ Read only the rules relevant to the current task:
 | `.claude/settings.json` | Canonical project-level Claude settings, permissions, and active hook registrations. |
 | `.claude/settings.local.json` | Machine-local Claude overrides; do not treat them as shared project policy. |
 | `.claude/.ck.json` | ClaudeKit feature and workflow configuration. |
-| `.claude/.ckignore` | Paths excluded from ClaudeKit scouting and hook processing. |
+| `.claude/.ckignore` | Paths excluded by ClaudeKit scouting and the scout-block hook. |
 | `.claude/.mcp.json.example` | Example MCP server configuration; never place credentials in the example. |
 | `.claude/hooks/` | Hook implementations referenced by `.claude/settings.json`. |
 | `.claude/hooks/managed-hooks.json` | Generated inventory of hooks managed by ClaudeKit; do not edit by hand. |
 | `.claude/hooks/docs/README.md` | Hook behavior, setup, and manual verification guidance. |
 | `.claude/statusline.cjs` | Claude status-line implementation configured by `.claude/settings.json`. |
 
-Treat `.claude/settings.json` as the source of truth for which hooks are active. A hook file merely
-existing under `.claude/hooks/` does not mean it is enabled.
+Treat `.claude/settings.json` as the canonical shared hook configuration. Active hooks come from the
+effective shared and local settings. A hook file merely existing under `.claude/hooks/` does not
+mean it is enabled.
 
 ## Agents And Tools Map
 
