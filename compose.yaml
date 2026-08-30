@@ -115,7 +115,7 @@ services:
     build:
       context: .
       dockerfile: docker/chroma/Dockerfile
-    image: ravid-chroma:1.0.15
+    image: ravid-chroma:1.5.9
     volumes:
       - chroma_data:/data
     healthcheck:

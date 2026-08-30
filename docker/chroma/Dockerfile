@@ -1,4 +1,4 @@
-FROM chromadb/chroma:1.0.15
+FROM chromadb/chroma:1.5.9
 
 USER root
 
