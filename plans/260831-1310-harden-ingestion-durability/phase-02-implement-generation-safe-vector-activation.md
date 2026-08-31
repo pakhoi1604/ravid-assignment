@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Implement Generation-Safe Vector Activation"
-status: pending
+status: completed
 priority: P1
 dependencies: [1]
 ---
@@ -83,10 +83,10 @@ Late stale-worker finalization schedules cleanup of its own exact generation.
 
 ## Success Criteria
 
-- [ ] No normal indexing path deletes active vectors before new-generation verification.
-- [ ] Retrieval reads only owner-scoped active generations.
-- [ ] Locked-version Chroma test passes without undocumented atomicity claims.
-- [ ] Adapter remains ORM-free and module-boundary tests pass.
+- [x] No normal indexing path deletes active vectors before new-generation verification.
+- [x] Retrieval reads only owner-scoped active generations.
+- [x] Locked-version Chroma test passes without undocumented atomicity claims.
+- [x] Adapter remains ORM-free and module-boundary tests pass.
 
 ## Risk Assessment
 

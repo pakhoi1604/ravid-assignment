@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Bound Ingestion Work and Validate"
-status: pending
+status: completed
 priority: P1
 dependencies: [4]
 ---
@@ -101,12 +101,12 @@ docker compose config --quiet
 
 ## Success Criteria
 
-- [ ] All three ceilings reject before embedding/vector writes.
-- [ ] All five phases have focused failure-path coverage.
-- [ ] PostgreSQL and Chroma integration gates pass where mocks are insufficient.
-- [ ] README and architecture docs match actual runtime behavior.
-- [ ] Live rollout cannot enable generation-only retrieval before reindex/reset verification.
-- [ ] Full validation passes without unrelated contract changes.
+- [x] All three ceilings reject before embedding/vector writes.
+- [x] All five phases have focused failure-path coverage.
+- [x] PostgreSQL and Chroma integration gates pass where mocks are insufficient.
+- [x] README and architecture docs match actual runtime behavior.
+- [x] Live rollout cannot enable generation-only retrieval before reindex/reset verification.
+- [x] Full validation passes without unrelated contract changes.
 
 ## Risk Assessment
 

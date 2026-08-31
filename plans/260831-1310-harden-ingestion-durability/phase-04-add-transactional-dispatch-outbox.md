@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Add Transactional Dispatch Outbox"
-status: pending
+status: completed
 priority: P1
 dependencies: [3]
 ---
@@ -88,10 +88,10 @@ safe. The outbox is not a PostgreSQL-Chroma transaction.
 
 ## Success Criteria
 
-- [ ] Every retryable generation has exactly one durable dispatch intent and bounded attempts.
-- [ ] Broker downtime cannot erase committed ingestion work.
-- [ ] Periodic publisher drains due rows after broker recovery.
-- [ ] Docs consistently say at-least-once, never exactly-once.
+- [x] Every retryable generation has exactly one durable dispatch intent and bounded attempts.
+- [x] Broker downtime cannot erase committed ingestion work.
+- [x] Periodic publisher drains due rows after broker recovery.
+- [x] Docs consistently say at-least-once, never exactly-once.
 
 ## Risk Assessment
 

@@ -6,16 +6,18 @@ RAVID is a modular Django monolith with four domain app packages.
 
 - `apps.accounts`: Django identity/JWT endpoints plus local subscriptions and concurrency-safe daily
   token usage.
-- `apps.documents`: upload, document metadata, ingestion status, extraction, chunking, and vector
-  indexing, with owner-filtered retrieval.
+- `apps.documents`: upload, document metadata, ingestion status, outbox dispatch, extraction,
+  chunking, vector indexing, stale recovery, and owner-filtered active-generation retrieval.
 - `apps.rag`: bounded prompt construction, OpenRouter free-tier integration, quota orchestration,
   and the synchronous chat API.
 - `apps.common`: shared liveness and narrowly reusable infrastructure.
 
-Within `apps.documents`, `ingestion.py` owns the workflow and depends on the leaf extraction,
-chunking, and vector-store adapters. Dependency-free `constants.py`, `contracts.py`, and
-`exceptions.py` hold shared document-domain definitions; leaf modules do not import the
-orchestrator. Within `apps.rag`, `services.py` remains the query-use-case orchestrator while
+Within `apps.documents`, `ingestion.py` owns extraction/chunk/vector write orchestration and
+depends on the leaf extraction, chunking, and vector-store adapters. `dispatch.py`, `recovery.py`,
+and `retrieval.py` own durable publish intent, generation-rotating recovery, and relational
+active-generation lookup. Dependency-free `constants.py`, `contracts.py`, and `exceptions.py` hold
+shared document-domain definitions; leaf modules do not import the orchestrator. Within `apps.rag`,
+`services.py` remains the query-use-case orchestrator while
 `contracts.py`, `provider_responses.py`, and `accounting.py` own result DTOs, provider parsing, and
 request-local quota settlement respectively. These are internal module boundaries, not additional
 Django apps or services.
@@ -27,10 +29,11 @@ duplicating credential logic.
 
 ## Service Topology
 
-Docker Compose defines one application image used by both `web` and `celery`.
+Docker Compose defines one application image used by `web`, `celery`, and `beat`.
 
 - `web` applies migrations and serves Django through Gunicorn.
 - `celery` starts a worker and autodiscovers Django tasks.
+- `beat` schedules ingestion outbox publication, stale recovery, and exact-generation cleanup.
 - `db` stores relational state in PostgreSQL.
 - `redis` provides the Celery broker and result backend.
 - `chroma` provides internal vector storage for document ingestion. Its image is based on pinned
@@ -39,7 +42,8 @@ Docker Compose defines one application image used by both `web` and `celery`.
 - `flower` exposes a loopback-only Celery dashboard for reviewers.
 
 The application services share media and Hugging Face cache volumes so upload handling and Celery
-ingestion use the same files and downloaded embedding models.
+ingestion use the same files and downloaded embedding models. Beat does not need uploaded media or
+OpenRouter credentials.
 
 OpenRouter calls are synchronous and originate only from `web`. Its API key is not forwarded to
 Celery, Flower, or the profile-gated test service. `openrouter/free` is the default model router;
@@ -52,16 +56,30 @@ live requests need a free-tier account and key, but no paid subscription.
 - `chroma_data`: vector-store data.
 - `hf_cache`: downloaded embedding/model artifacts.
 
-Redis result state is operational only. User-visible ingestion status is stored in PostgreSQL.
+Redis result state is operational only. User-visible ingestion status, generation ownership, and
+broker dispatch intent are stored in PostgreSQL.
 
 Document ingestion extracts text from PDF, TXT, and Markdown files, splits text with LangChain,
 embeds chunks, and writes them to one Chroma collection. Vector records carry user and public
-document metadata. Re-ingestion resolves every prior vector using a trusted owner-plus-document
-filter before replacement, so shrinking documents do not retain stale tail chunks and corrupted
-cross-owner metadata is not deleted. Incoming owner/document metadata and deterministic chunk IDs
-are validated at the adapter boundary. Retrieval always applies the authenticated user's identifier
-as a native Chroma filter and then validates returned owner metadata before results leave the
-adapter.
+document metadata plus an immutable generation UUID. `Document.active_generation` is the relational
+visibility pointer, while `IngestionJob.generation` fences the current attempt. A worker writes and
+verifies all generation-qualified chunks before a PostgreSQL transaction activates that generation
+and marks the job `SUCCESS`. The previous active generation remains visible until activation, then
+is recorded in `IngestionGeneration` for delayed exact cleanup.
+
+Retrieval first resolves the authenticated owner's active document-generation pairs in PostgreSQL,
+passes active generations to Chroma as a native filter, and validates every returned
+owner/document/generation pair before results leave the document module. Legacy generation-less,
+failed, incomplete, or stale vectors are invisible to chat. Cleanup deletes only manifest-owned
+stale generations after the configured grace period and excludes both the active pointer and all
+live job generations.
+
+Uploads create `Document`, `IngestionJob`, and `IngestionDispatch` rows in one database transaction.
+The web request does not call the broker. A leased outbox publisher claims due rows, publishes
+outside the database transaction, then compare-and-swaps the same claim token to `PUBLISHED` or a
+bounded retry/dead state. This is at-least-once dispatch; duplicate deliveries are expected and made
+safe by generation fencing. Stale pending and stale processing recovery rotate the job generation
+before adding a new dispatch row, so late workers cannot activate older chunks or terminal state.
 
 Each worker caches at most eight Chroma/store/embedding configurations in-process and serializes
 cold construction. This avoids reloading SentenceTransformer weights for every chat query while
@@ -142,15 +160,18 @@ account-domain state rather than public billing endpoints.
 
 ## Known Production Limitations
 
-- Chroma replacement is delete-then-add rather than atomic/versioned. An add failure after deletion
-  requires restoring the service and re-queuing ingestion for the affected document.
+- PostgreSQL owns visibility and dispatch durability, but there is no distributed transaction
+  between PostgreSQL, Redis, and Chroma. Crash after activation can leave invisible stale vectors
+  until cleanup runs.
 - Quota reservations have no durable per-stage settlement ledger or reconciliation worker; a crash
   or ambiguous finalize/refund failure can retain the conservative reservation.
-- Celery ingestion has no stale-job recovery, dispatch outbox, or duplicate/concurrent-delivery
-  generation guard.
-- Extraction is synchronous inside a worker and does not yet enforce PDF signature/MIME, page,
-  extracted-character, or chunk-count ceilings beyond the upload byte limit; chunk embedding and
-  vector writes are not batched.
+- Celery dispatch is at least once, not exactly once. PostgreSQL generation fencing makes duplicate
+  delivery harmless for activation, but it can still waste worker CPU and leave inactive chunks for
+  cleanup.
+- Extraction is synchronous inside a worker and enforces page, extracted-character, and chunk-count
+  ceilings. These limits are not PDF process isolation, MIME/signature validation, antivirus, or
+  tenant quota enforcement.
+- Chunk embedding and vector writes are not batched.
 - Embedding and provider work are synchronous and do not yet have workload-specific concurrency or
   backpressure controls.
 - Document text and metadata are explicitly framed as untrusted in prompts, but stronger structural
