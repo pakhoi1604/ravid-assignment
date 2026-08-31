@@ -51,6 +51,22 @@ def test_rag_defaults_use_free_router_and_bounded_requests():
 def test_celery_uses_django_settings_namespace():
     assert current_app.main == "ravid"
     assert settings.CELERY_BROKER_URL == "memory://"
+    assert settings.CELERY_TASK_IGNORE_RESULT is True
+
+
+def test_ingestion_defaults_are_bounded_and_coherent():
+    assert settings.INGESTION_MAX_PDF_PAGES == 200
+    assert settings.INGESTION_MAX_EXTRACTED_CHARS == 2_000_000
+    assert settings.INGESTION_MAX_CHUNKS == 2_500
+    assert settings.INGESTION_MAX_RECOVERY_ATTEMPTS == 3
+    assert settings.INGESTION_OUTBOX_MAX_ATTEMPTS == 5
+    assert settings.INGESTION_CLEANUP_MAX_ATTEMPTS == 5
+    assert settings.INGESTION_CLEANUP_BACKOFF_SECONDS == 300
+    assert settings.INGESTION_STALE_PROCESSING_SECONDS >= (
+        settings.CELERY_TASK_TIME_LIMIT + settings.INGESTION_LEASE_SAFETY_SECONDS
+    )
+    assert "publish-ingestion-dispatches" in settings.CELERY_BEAT_SCHEDULE
+    assert "recover-ingestion-work" in settings.CELERY_BEAT_SCHEDULE
 
 
 def test_production_settings_require_secret_key(monkeypatch):

@@ -13,6 +13,64 @@ def chunk(*, user_id=1, document_id="doc", index=0):
     )
 
 
+def generation_chunk(*, user_id=1, document_id="doc", generation="gen", index=0):
+    return Chunk(
+        text=f"chunk {index}",
+        metadata={
+            "user_id": user_id,
+            "document_id": document_id,
+            "generation": generation,
+            "chunk_index": index,
+        },
+        id=f"document-{document_id}-generation-{generation}-chunk-{index}",
+    )
+
+
+def test_write_document_generation_adds_then_verifies_without_delete(monkeypatch):
+    calls = []
+
+    class Store:
+        def get(self, *, ids, include):
+            calls.append(("get", ids, include))
+            if len(calls) == 1:
+                return {"ids": [], "metadatas": []}
+            return {
+                "ids": ["document-doc-generation-gen-chunk-0"],
+                "metadatas": [{"user_id": 1, "document_id": "doc", "generation": "gen"}],
+            }
+
+        def add_texts(self, *, texts, metadatas, ids):
+            calls.append(("add", texts, metadatas, ids))
+
+        def delete(self, **kwargs):
+            pytest.fail("write must not delete active vectors")
+
+    vector_store = DocumentVectorStore(collection_name="test")
+    monkeypatch.setattr(vector_store, "_build_store", lambda: Store())
+
+    vector_store.write_document_generation(
+        user_id=1,
+        document_id="doc",
+        generation="gen",
+        chunks=[generation_chunk()],
+    )
+
+    assert calls[1][0] == "add"
+
+
+def test_write_document_generation_fails_closed_on_wrong_generation_metadata(monkeypatch):
+    vector_store = DocumentVectorStore(collection_name="test")
+    monkeypatch.setattr(vector_store, "_build_store", lambda: pytest.fail("must not build store"))
+
+    with pytest.raises(IngestionError):
+        vector_store.write_document_generation(
+            user_id=1,
+            document_id="doc",
+            generation="gen",
+            chunks=[generation_chunk(generation="other")],
+        )
+
+
 def test_replace_document_chunks_resolves_all_old_ids_before_delete_and_add(monkeypatch):
     calls = []
 

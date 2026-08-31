@@ -24,6 +24,7 @@ class ControlledEmbeddings:
 def test_controlled_hyde_text_changes_real_similarity_retrieval(settings):
     settings.RAG_RETRIEVAL_SEARCH_TYPE = "similarity"
     collection_name = f"ravid-hyde-eval-{uuid.uuid4().hex}"
+    generation = str(uuid.uuid4())
     store = Chroma(
         client=chromadb.Client(),
         collection_name=collection_name,
@@ -36,9 +37,9 @@ def test_controlled_hyde_text_changes_real_similarity_retrieval(settings):
             "Another owner's cancellation terms are confidential.",
         ],
         metadatas=[
-            {"user_id": 101, "label": "target"},
-            {"user_id": 101, "label": "baseline"},
-            {"user_id": 202, "label": "other-owner"},
+            {"user_id": 101, "label": "target", "generation": generation},
+            {"user_id": 101, "label": "baseline", "generation": generation},
+            {"user_id": 202, "label": "other-owner", "generation": generation},
         ],
         ids=["owner-101-target", "owner-101-baseline", "owner-202-target"],
     )
@@ -49,12 +50,14 @@ def test_controlled_hyde_text_changes_real_similarity_retrieval(settings):
         baseline = vector_store.retrieve_for_user(
             user_id=101,
             query="What does the policy say?",
+            active_generations=(generation,),
             k=1,
             search_type="similarity",
         )
         hyde = vector_store.retrieve_for_user(
             user_id=101,
             query="The policy permits cancellation within fourteen days.",
+            active_generations=(generation,),
             k=1,
             search_type="similarity",
         )

@@ -14,8 +14,10 @@ def test_web_worker_and_flower_share_application_image():
 
     assert services["web"]["image"] == "ravid-app:local"
     assert services["celery"]["image"] == "ravid-app:local"
+    assert services["beat"]["image"] == "ravid-app:local"
     assert services["flower"]["image"] == "ravid-app:local"
     assert "build" not in services["celery"]
+    assert "build" not in services["beat"]
     assert "build" not in services["flower"]
 
 
@@ -72,7 +74,7 @@ def test_openrouter_secret_is_forwarded_only_to_web():
     services = load_compose()["services"]
 
     assert "OPENROUTER_API_KEY" in services["web"]["environment"]
-    for service_name in ("celery", "flower", "test"):
+    for service_name in ("celery", "beat", "flower", "test"):
         assert "OPENROUTER_API_KEY" not in services[service_name]["environment"]
 
 
@@ -98,6 +100,35 @@ def test_web_forwards_free_router_and_rag_defaults():
     assert web_environment["RAG_TEMPERATURE"] == "${RAG_TEMPERATURE:-0}"
     assert web_environment["RAG_PROVIDER_TIMEOUT_MS"] == "${RAG_PROVIDER_TIMEOUT_MS:-10000}"
     assert web_environment["RAG_PROVIDER_MAX_RETRIES"] == ("${RAG_PROVIDER_MAX_RETRIES:-0}")
+
+
+def test_ingestion_runtime_limits_are_forwarded_to_web_worker_and_beat():
+    services = load_compose()["services"]
+
+    for service_name in ("web", "celery"):
+        environment = services[service_name]["environment"]
+        assert environment["INGESTION_MAX_PDF_PAGES"] == "${INGESTION_MAX_PDF_PAGES:-200}"
+        assert environment["INGESTION_MAX_EXTRACTED_CHARS"] == (
+            "${INGESTION_MAX_EXTRACTED_CHARS:-2000000}"
+        )
+        assert environment["INGESTION_MAX_CHUNKS"] == "${INGESTION_MAX_CHUNKS:-2500}"
+        assert environment["INGESTION_OUTBOX_MAX_ATTEMPTS"] == (
+            "${INGESTION_OUTBOX_MAX_ATTEMPTS:-5}"
+        )
+        assert environment["INGESTION_CLEANUP_MAX_ATTEMPTS"] == (
+            "${INGESTION_CLEANUP_MAX_ATTEMPTS:-5}"
+        )
+
+    beat_environment = services["beat"]["environment"]
+    assert beat_environment["INGESTION_OUTBOX_PUBLISH_INTERVAL_SECONDS"] == (
+        "${INGESTION_OUTBOX_PUBLISH_INTERVAL_SECONDS:-10}"
+    )
+    assert beat_environment["INGESTION_RECOVERY_INTERVAL_SECONDS"] == (
+        "${INGESTION_RECOVERY_INTERVAL_SECONDS:-60}"
+    )
+    assert beat_environment["INGESTION_CLEANUP_BACKOFF_SECONDS"] == (
+        "${INGESTION_CLEANUP_BACKOFF_SECONDS:-300}"
+    )
 
 
 def test_chroma_image_runs_as_non_root_user():

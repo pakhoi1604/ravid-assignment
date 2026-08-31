@@ -23,13 +23,17 @@ def job(db, settings, tmp_path):
 
 @pytest.mark.django_db
 def test_ingest_document_marks_success(job, monkeypatch):
-    monkeypatch.setattr("apps.documents.tasks.run_ingestion_pipeline", lambda current_job: 3)
+    monkeypatch.setattr(
+        "apps.documents.tasks.run_ingestion_pipeline", lambda current_job, generation: 3
+    )
 
-    result = ingest_document(str(job.task_id))
+    result = ingest_document(str(job.task_id), str(job.generation))
 
     job.refresh_from_db()
+    job.document.refresh_from_db()
     assert result == 3
     assert job.status == IngestionJob.Status.SUCCESS
+    assert job.document.active_generation == job.generation
     assert job.error == ""
     assert job.started_at is not None
     assert job.completed_at is not None
@@ -40,9 +44,12 @@ def test_ingest_document_marks_expected_failure(job, monkeypatch):
     def fail(_job):
         raise IngestionError("Failed to parse document content.")
 
-    monkeypatch.setattr("apps.documents.tasks.run_ingestion_pipeline", fail)
+    monkeypatch.setattr(
+        "apps.documents.tasks.run_ingestion_pipeline",
+        lambda current_job, generation: fail(current_job),
+    )
 
-    result = ingest_document(str(job.task_id))
+    result = ingest_document(str(job.task_id), str(job.generation))
 
     job.refresh_from_db()
     assert result == 0
@@ -53,8 +60,9 @@ def test_ingest_document_marks_expected_failure(job, monkeypatch):
 
 @pytest.mark.django_db
 def test_ingest_document_ignores_unknown_task_id():
-    assert ingest_document("00000000-0000-0000-0000-000000000000") == 0
-    assert ingest_document("not-a-uuid") == 0
+    generation = "00000000-0000-0000-0000-000000000000"
+    assert ingest_document("00000000-0000-0000-0000-000000000000", generation) == 0
+    assert ingest_document("not-a-uuid", generation) == 0
 
 
 @pytest.mark.django_db
@@ -70,4 +78,27 @@ def test_enqueue_uses_job_task_id(job, monkeypatch):
 
     enqueue_ingestion(job)
 
-    assert calls == [([str(job.task_id)], str(job.task_id))]
+    assert calls[0][0] == [str(job.task_id), str(job.generation)]
+    assert calls[0][1] != str(job.task_id)
+
+
+@pytest.mark.django_db
+def test_ingest_document_ignores_success_duplicate(job, monkeypatch):
+    job.status = IngestionJob.Status.SUCCESS
+    job.save(update_fields=["status"])
+    monkeypatch.setattr(
+        "apps.documents.tasks.run_ingestion_pipeline",
+        lambda current_job, generation: pytest.fail("duplicate must not ingest"),
+    )
+
+    assert ingest_document(str(job.task_id), str(job.generation)) == 0
+
+
+@pytest.mark.django_db
+def test_ingest_document_ignores_mismatched_generation(job, monkeypatch):
+    monkeypatch.setattr(
+        "apps.documents.tasks.run_ingestion_pipeline",
+        lambda current_job, generation: pytest.fail("stale delivery must not ingest"),
+    )
+
+    assert ingest_document(str(job.task_id), "00000000-0000-0000-0000-000000000000") == 0

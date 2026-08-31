@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.documents.models import Document, IngestionJob
+from apps.documents.models import Document, IngestionDispatch, IngestionJob
 
 
 @pytest.fixture
@@ -34,14 +34,7 @@ def upload_file(name="notes.txt", content=b"hello"):
 
 @pytest.mark.django_db
 @override_settings(MEDIA_ROOT="/tmp/ravid-test-media")
-def test_upload_creates_document_and_job(
-    client, user, monkeypatch, django_capture_on_commit_callbacks
-):
-    dispatched = []
-    monkeypatch.setattr(
-        "apps.documents.views.enqueue_ingestion", lambda job: dispatched.append(job.task_id)
-    )
-
+def test_upload_creates_document_and_job(client, user, django_capture_on_commit_callbacks):
     with django_capture_on_commit_callbacks(execute=True):
         response = client.post(
             reverse("document-upload"),
@@ -54,12 +47,15 @@ def test_upload_creates_document_and_job(
     assert payload["message"] == "Document uploaded and ingestion started"
     assert uuid.UUID(payload["document_id"])
     assert uuid.UUID(payload["task_id"])
-    assert dispatched == [IngestionJob.objects.get().task_id]
 
     document = Document.objects.get()
+    job = IngestionJob.objects.get()
+    dispatch = IngestionDispatch.objects.get()
     assert document.owner == user
     assert document.original_filename == "notes.txt"
     assert document.size_bytes == 5
+    assert dispatch.job == job
+    assert dispatch.generation == job.generation
 
 
 @pytest.mark.django_db
@@ -98,7 +94,7 @@ def test_upload_rejects_oversized_file(client, user):
 
 
 @pytest.mark.django_db
-def test_status_serializes_pending_as_processing(client, user):
+def test_status_serializes_pending_truthfully(client, user):
     document = Document.objects.create(
         owner=user,
         original_filename="notes.txt",
@@ -115,7 +111,7 @@ def test_status_serializes_pending_as_processing(client, user):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"task_id": str(job.task_id), "status": "PROCESSING"}
+    assert response.json() == {"task_id": str(job.task_id), "status": "PENDING"}
 
 
 @pytest.mark.django_db
