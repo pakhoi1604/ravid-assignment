@@ -45,8 +45,6 @@ class DocumentErrorSerializer(serializers.Serializer):
 
 def format_status_response(job: IngestionJob) -> dict[str, str]:
     status = job.status
-    if status == IngestionJob.Status.PENDING:
-        status = IngestionJob.Status.PROCESSING
 
     response = {
         "task_id": str(job.task_id),

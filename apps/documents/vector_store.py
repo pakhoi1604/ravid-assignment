@@ -43,6 +43,7 @@ def validate_retrieval_settings(
 def build_search_kwargs_for_user(
     *,
     user_id: int,
+    active_generations: Sequence[str] | None = None,
     k: int,
     search_type: str,
     score_threshold: float | None,
@@ -55,7 +56,15 @@ def build_search_kwargs_for_user(
         fetch_k=fetch_k,
     )
 
-    search_kwargs: dict[str, object] = {"k": k, "filter": {"user_id": user_id}}
+    if active_generations is None or not active_generations:
+        raise ValueError("active_generations are required.")
+    owner_filter: dict[str, object] = {
+        "$and": [
+            {"user_id": {"$eq": user_id}},
+            {"generation": {"$in": list(active_generations)}},
+        ]
+    }
+    search_kwargs: dict[str, object] = {"k": k, "filter": owner_filter}
     if search_type == "similarity_score_threshold":
         search_kwargs["score_threshold"] = score_threshold
     elif search_type == "mmr" and fetch_k is not None:
@@ -154,10 +163,89 @@ class DocumentVectorStore:
         except (self._chroma_error_type(), httpx.TransportError, OSError) as exc:
             raise IngestionError("Failed to parse document content.") from exc
 
+    def write_document_generation(
+        self,
+        *,
+        user_id: int,
+        document_id: str,
+        generation: str,
+        chunks: Sequence[Chunk],
+    ) -> None:
+        if not chunks:
+            raise IngestionError("Failed to parse document content.")
+        self._validate_generation_chunks(
+            user_id=user_id,
+            document_id=document_id,
+            generation=generation,
+            chunks=chunks,
+        )
+
+        store = self._build_store()
+        ids = [chunk.id for chunk in chunks]
+        try:
+            incoming_lookup = store.get(ids=ids, include=["metadatas"])
+            self._validate_incoming_id_ownership(
+                incoming_lookup,
+                user_id=user_id,
+                document_id=document_id,
+                generation=generation,
+            )
+            store.add_texts(
+                texts=[chunk.text for chunk in chunks],
+                metadatas=[chunk.metadata for chunk in chunks],
+                ids=ids,
+            )
+            written_lookup = store.get(ids=ids, include=["metadatas"])
+            self._validate_written_generation(
+                written_lookup,
+                expected_ids=ids,
+                user_id=user_id,
+                document_id=document_id,
+                generation=generation,
+            )
+        except IngestionError:
+            raise
+        except ValueError as exc:
+            if not self._is_chroma_connection_error(exc):
+                raise
+            raise IngestionError("Failed to parse document content.") from exc
+        except (self._chroma_error_type(), httpx.TransportError, OSError) as exc:
+            raise IngestionError("Failed to parse document content.") from exc
+
+    def delete_document_generation(
+        self,
+        *,
+        user_id: int,
+        document_id: str,
+        generation: str,
+    ) -> int:
+        where = {
+            "$and": [
+                {"user_id": {"$eq": user_id}},
+                {"document_id": {"$eq": document_id}},
+                {"generation": {"$eq": generation}},
+            ]
+        }
+        try:
+            lookup = self._build_store().get(where=where, include=[])
+            ids = self._validate_lookup_ids(lookup)
+            if ids:
+                self._build_store().delete(ids=ids)
+            return len(ids)
+        except IngestionError:
+            raise
+        except ValueError as exc:
+            if not self._is_chroma_connection_error(exc):
+                raise
+            raise IngestionError("Failed to parse document content.") from exc
+        except (self._chroma_error_type(), httpx.TransportError, OSError) as exc:
+            raise IngestionError("Failed to parse document content.") from exc
+
     def as_retriever_for_user(
         self,
         *,
         user_id: int,
+        active_generations: Sequence[str] | None = None,
         k: int,
         search_type: str = "similarity",
         score_threshold: float | None = None,
@@ -167,6 +255,7 @@ class DocumentVectorStore:
             raise ValueError("user_id must be an integer.")
         search_kwargs = build_search_kwargs_for_user(
             user_id=user_id,
+            active_generations=active_generations,
             k=k,
             search_type=search_type,
             score_threshold=score_threshold,
@@ -186,6 +275,7 @@ class DocumentVectorStore:
         *,
         user_id: int,
         query: str,
+        active_generations: Sequence[str] | None = None,
         k: int,
         search_type: str,
         score_threshold: float | None = None,
@@ -193,6 +283,7 @@ class DocumentVectorStore:
     ) -> list[Document]:
         retriever = self.as_retriever_for_user(
             user_id=user_id,
+            active_generations=active_generations,
             k=k,
             search_type=search_type,
             score_threshold=score_threshold,
@@ -203,14 +294,48 @@ class DocumentVectorStore:
         except (self._chroma_error_type(), httpx.TransportError, OSError) as exc:
             raise VectorRetrievalError("Vector retrieval is unavailable.") from exc
 
+        if active_generations is None or not active_generations:
+            raise ValueError("active_generations are required.")
+        allowed_generations = set(active_generations)
         if not isinstance(documents, list) or any(
-            isinstance(document.metadata.get("user_id"), bool)
-            or not isinstance(document.metadata.get("user_id"), int)
-            or document.metadata.get("user_id") != user_id
+            self._result_metadata_is_untrusted(
+                document.metadata,
+                user_id=user_id,
+                allowed_generations=allowed_generations,
+            )
             for document in documents
         ):
             raise VectorRetrievalError("Vector retrieval is unavailable.")
         return documents
+
+    @staticmethod
+    def _validate_generation_chunks(
+        *,
+        user_id: int,
+        document_id: str,
+        generation: str,
+        chunks: Sequence[Chunk],
+    ) -> None:
+        if isinstance(user_id, bool) or not isinstance(user_id, int):
+            raise IngestionError("Failed to parse document content.")
+        if not isinstance(document_id, str) or not document_id:
+            raise IngestionError("Failed to parse document content.")
+        if not isinstance(generation, str) or not generation:
+            raise IngestionError("Failed to parse document content.")
+        for chunk in chunks:
+            metadata_user_id = chunk.metadata.get("user_id")
+            chunk_index = chunk.metadata.get("chunk_index")
+            expected_id = f"document-{document_id}-generation-{generation}-chunk-{chunk_index}"
+            if (
+                type(metadata_user_id) is not int
+                or metadata_user_id != user_id
+                or chunk.metadata.get("document_id") != document_id
+                or chunk.metadata.get("generation") != generation
+                or type(chunk_index) is not int
+                or chunk_index < 0
+                or chunk.id != expected_id
+            ):
+                raise IngestionError("Failed to parse document content.")
 
     @staticmethod
     def _validate_lookup_ids(lookup) -> list[str]:
@@ -231,6 +356,7 @@ class DocumentVectorStore:
         *,
         user_id: int,
         document_id: str,
+        generation: str | None = None,
     ) -> None:
         if not isinstance(lookup, dict):
             raise IngestionError("Failed to parse document content.")
@@ -248,8 +374,56 @@ class DocumentVectorStore:
                 or type(metadata.get("user_id")) is not int
                 or metadata.get("user_id") != user_id
                 or metadata.get("document_id") != document_id
+                or (generation is not None and metadata.get("generation") != generation)
             ):
                 raise IngestionError("Failed to parse document content.")
+
+    @staticmethod
+    def _validate_written_generation(
+        lookup,
+        *,
+        expected_ids: Sequence[str],
+        user_id: int,
+        document_id: str,
+        generation: str,
+    ) -> None:
+        if not isinstance(lookup, dict):
+            raise IngestionError("Failed to parse document content.")
+        ids = lookup.get("ids")
+        metadatas = lookup.get("metadatas")
+        if (
+            not isinstance(ids, list)
+            or set(ids) != set(expected_ids)
+            or not isinstance(metadatas, list)
+            or len(ids) != len(metadatas)
+        ):
+            raise IngestionError("Failed to parse document content.")
+        for metadata in metadatas:
+            if (
+                not isinstance(metadata, dict)
+                or type(metadata.get("user_id")) is not int
+                or metadata.get("user_id") != user_id
+                or metadata.get("document_id") != document_id
+                or metadata.get("generation") != generation
+            ):
+                raise IngestionError("Failed to parse document content.")
+
+    @staticmethod
+    def _result_metadata_is_untrusted(
+        metadata,
+        *,
+        user_id: int,
+        allowed_generations: set[str],
+    ) -> bool:
+        if (
+            isinstance(metadata.get("user_id"), bool)
+            or not isinstance(metadata.get("user_id"), int)
+            or metadata.get("user_id") != user_id
+        ):
+            return True
+        if metadata.get("generation") not in allowed_generations:
+            return True
+        return False
 
     @staticmethod
     def _is_chroma_connection_error(exc: ValueError) -> bool:

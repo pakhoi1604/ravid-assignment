@@ -4,6 +4,7 @@ from django.conf import settings
 
 from apps.accounts.entitlements import ensure_active_subscription
 from apps.documents.exceptions import VectorRetrievalError
+from apps.documents.retrieval import retrieve_active_documents_for_user
 from apps.documents.vector_store import get_vector_store, validate_retrieval_settings
 from apps.rag.accounting import RagStageAccounting
 from apps.rag.contracts import RagAnswer, RetrievalMetadata, RetrievalPolicy
@@ -53,6 +54,7 @@ class RagService:
         self.rag_prompt_binder = rag_prompt_binder
         self.hyde_prompt_binder = hyde_prompt_binder
         self.accounting = accounting if accounting is not None else RagStageAccounting()
+        self._uses_default_vector_store = vector_store_factory is get_vector_store
 
     def _validated_retrieval_policy(self) -> RetrievalPolicy:
         policy = RetrievalPolicy(
@@ -176,6 +178,23 @@ class RagService:
             fetch_k=policy.fetch_k,
         )
 
+    def _fetch_active_documents_for_query(
+        self,
+        *,
+        user_id: int,
+        query: str,
+        policy: RetrievalPolicy,
+    ):
+        return retrieve_active_documents_for_user(
+            user_id=user_id,
+            query=query,
+            k=policy.k,
+            search_type=policy.search_type,
+            score_threshold=policy.score_threshold,
+            fetch_k=policy.fetch_k,
+            vector_store_factory=self.vector_store_factory,
+        )
+
     def _run_final_answer(
         self,
         *,
@@ -247,11 +266,18 @@ class RagService:
             total_actual_tokens = 0
 
         try:
-            documents = self._fetch_documents_for_query(
-                user_id=user.id,
-                query=retrieval_query,
-                policy=retrieval_policy,
-            )
+            if self._uses_default_vector_store:
+                documents = self._fetch_active_documents_for_query(
+                    user_id=user.id,
+                    query=retrieval_query,
+                    policy=retrieval_policy,
+                )
+            else:
+                documents = self._fetch_documents_for_query(
+                    user_id=user.id,
+                    query=retrieval_query,
+                    policy=retrieval_policy,
+                )
         except VectorRetrievalError as exc:
             raise RagRetrievalError("Vector retrieval is unavailable.") from exc
 

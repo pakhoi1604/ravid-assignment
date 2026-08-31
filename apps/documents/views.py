@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.documents.dispatch import create_ingestion_dispatch
 from apps.documents.models import Document, IngestionJob
 from apps.documents.serializers import (
     DocumentErrorSerializer,
@@ -17,7 +18,6 @@ from apps.documents.serializers import (
     UploadSerializer,
     format_status_response,
 )
-from apps.documents.tasks import enqueue_ingestion
 
 
 def first_error(serializer: UploadSerializer) -> str:
@@ -44,17 +44,23 @@ class DocumentUploadView(APIView):
         if not serializer.is_valid():
             return Response({"error": first_error(serializer)}, status=status.HTTP_400_BAD_REQUEST)
 
-        uploaded_file = serializer.validated_data["file"]
-        with transaction.atomic():
-            document = Document.objects.create(
-                owner=request.user,
-                original_filename=Path(uploaded_file.name).name,
-                file=uploaded_file,
-                content_type=getattr(uploaded_file, "content_type", "") or "",
-                size_bytes=uploaded_file.size,
-            )
-            job = IngestionJob.objects.create(document=document)
-            transaction.on_commit(lambda: enqueue_ingestion(job))
+        document = None
+        try:
+            uploaded_file = serializer.validated_data["file"]
+            with transaction.atomic():
+                document = Document.objects.create(
+                    owner=request.user,
+                    original_filename=Path(uploaded_file.name).name,
+                    file=uploaded_file,
+                    content_type=getattr(uploaded_file, "content_type", "") or "",
+                    size_bytes=uploaded_file.size,
+                )
+                job = IngestionJob.objects.create(document=document)
+                create_ingestion_dispatch(job)
+        except Exception:
+            if document is not None and document.file:
+                document.file.delete(save=False)
+            raise
 
         return Response(
             {
