@@ -1,0 +1,38 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "score": 9.2,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "PASS: POST /api/documents/upload/ continues to advertise multipart/form-data and now references #/components/schemas/UploadRequest.",
+    "PASS: UploadRequest.file is required and generated as type string with format binary.",
+    "PASS: The binary OpenAPI shape is the contract Swagger UI uses to render a native file chooser after reload.",
+    "PASS: Runtime endpoint paths, authentication, multipart parsers, file validation, storage, status codes, and response serializers are untouched.",
+    "PASS: The schema regression test fails on the former Upload component and locks the new UploadRequest binary contract.",
+    "PASS: Scope is limited to config/settings/base.py and tests/smoke/test_health.py with no unjustified implementation extras."
+  ],
+  "regressionProof": [
+    "Fresh focused verification passed: 12 tests in tests/smoke/test_health.py and tests/documents/test_api.py.",
+    "Fresh full-suite verification passed: 240 tests passed and 3 skipped.",
+    "Fresh official lint passed: ruff check apps config tests; scoped git diff check also passed.",
+    "Fresh schema generation with validation completed without warnings and emitted UploadRequest.file as binary.",
+    "Repository search found no in-repo consumers that hard-code the renamed OpenAPI request component names.",
+    "Review of upload, auth, and chat runtime touchpoints found no code-path, query, concurrency, error-boundary, authorization, validation, or data-exposure changes."
+  ],
+  "contractStatus": "CHANGED",
+  "blockingReasons": [],
+  "specCompliance": "PASS",
+  "criticalIssues": [],
+  "warnings": [
+    "COMPONENT_SPLIT_REQUEST is schema-wide: ChatQuery, TokenObtainPair, TokenRefresh, and Upload request components are now named with a Request suffix.",
+    "Request-only schemas now expose request constraints such as minLength for non-blank chat and JWT fields. This is runtime-accurate but changes generated OpenAPI output.",
+    "External generated clients or tooling that hard-code component names must regenerate or update; the repository contains no such consumers, but external consumers cannot be proven absent."
+  ],
+  "suggestions": [
+    "Regenerate any externally maintained API clients when this schema change is released.",
+    "Treat the request-component rename as an intentional OpenAPI compatibility note in release communication if external consumers exist."
+  ],
+  "sideEffects": [
+    "Intentional OpenAPI-only change: request and response components are split globally.",
+    "No Django, DRF, database, authentication, upload, chat, storage, task-dispatch, or response runtime behavior changes were found."
+  ]
+}

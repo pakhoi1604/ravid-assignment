@@ -1,0 +1,33 @@
+{
+  "skill": "ck:cook",
+  "mode": "auto",
+  "task": "Execute the clean module boundaries plan for documents and RAG",
+  "acceptanceCriteria": [
+    "document leaf modules do not import ingestion orchestration",
+    "vector replacement and retrieval enforce trusted owner scope",
+    "retrieval policy crosses the RAG-to-documents boundary explicitly",
+    "RAG contracts, provider parsing, prompt binding, and accounting have focused ownership",
+    "API, HyDE, quota, document status, configuration, lint, and regression checks pass"
+  ],
+  "touchpoints": [
+    "apps/documents",
+    "apps/rag",
+    "tests/documents",
+    "tests/rag",
+    "README.md",
+    "docs/system-architecture.md"
+  ],
+  "publicContracts": [
+    "accepted HyDE request and response schema from the preceding plan",
+    "document upload and status API",
+    "quota and safe-error behavior",
+    "Celery ingestion task name and lifecycle"
+  ],
+  "blastRadius": [
+    "document ingestion and re-ingestion",
+    "owner-scoped vector retrieval",
+    "HyDE and standard RAG queries",
+    "per-stage quota accounting"
+  ],
+  "scoutSummary": "The four-app Django modular monolith was retained. Focused internal modules replace orchestration back-imports without adding framework-level abstractions."
+}

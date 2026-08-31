@@ -1,0 +1,26 @@
+{
+  "skill": "ck:cook",
+  "mode": "code",
+  "task": "Fix Swagger document file upload input",
+  "acceptanceCriteria": [
+    "The upload operation advertises multipart/form-data",
+    "UploadRequest.file is required with type string and format binary",
+    "Swagger UI can render a browser file picker from the binary request schema",
+    "Runtime upload paths, authentication, validation, storage, and responses remain unchanged",
+    "Existing schema and document tests pass"
+  ],
+  "touchpoints": [
+    "config/settings/base.py",
+    "tests/smoke/test_health.py"
+  ],
+  "publicContracts": [
+    "OpenAPI request components are split and receive Request suffixes",
+    "POST /api/documents/upload/ remains authenticated multipart/form-data with field file"
+  ],
+  "blastRadius": [
+    "Swagger UI request rendering",
+    "OpenAPI component names for upload, chat, and JWT authentication",
+    "External schema consumers that pin component names"
+  ],
+  "scoutSummary": "Runtime serializers, parsers, views, URLs, authentication, validation, persistence, and responses are unchanged. No generated clients or in-repo consumers depend on the old request component names."
+}

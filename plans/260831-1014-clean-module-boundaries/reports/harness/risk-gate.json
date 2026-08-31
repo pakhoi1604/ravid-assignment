@@ -1,0 +1,11 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "owner-isolated vector writes and retrieval are security-sensitive",
+    "the combined working tree includes accepted public HyDE and production configuration additions",
+    "the live diff exceeds the large-change threshold"
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": true
+}

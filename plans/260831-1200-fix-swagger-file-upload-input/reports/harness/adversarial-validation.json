@@ -1,0 +1,15 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "Swagger UI was not exercised in a browser, so native file-picker rendering is inferred from the verified multipart binary schema rather than directly observed.",
+    "No repository consumer references the old component names, but compatibility for unknown external consumers of the public schema cannot be established from repository evidence.",
+    "The regression test covers UploadRequest and ChatQueryRequest, but does not lock the schema-wide TokenObtainPairRequest and TokenRefreshRequest references or the corresponding response-only component shapes."
+  ],
+  "missingProof": [
+    "A browser-level or manual Swagger UI check confirming that POST /api/documents/upload/ renders a native file chooser.",
+    "An explicit acceptance or compatibility inventory for external generated clients and other consumers that may pin OpenAPI component names.",
+    "A reviewed before/after schema contract assertion or snapshot covering the intentional JWT component split."
+  ],
+  "reachableRegressions": []
+}

@@ -1,0 +1,17 @@
+{
+  "decision": "PASS_WITH_RISK",
+  "score": 9.1,
+  "criticalCount": 0,
+  "acceptanceCoverage": [
+    "22 of 22 phase criteria mapped to tests or inspection",
+    "all four top-level plan criteria verified"
+  ],
+  "regressionProof": [
+    "233 local tests passed",
+    "all three production-only scenarios passed in Compose",
+    "no stale apps.documents.services imports remain",
+    "lint, format, Django, migrations, Compose, OpenAPI, and diff checks passed"
+  ],
+  "contractStatus": "CHANGED",
+  "blockingReasons": []
+}

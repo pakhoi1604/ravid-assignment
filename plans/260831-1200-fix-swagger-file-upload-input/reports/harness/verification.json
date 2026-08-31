@@ -1,0 +1,43 @@
+{
+  "commands": [
+    {
+      "command": "UV_CACHE_DIR=/tmp/ravid-uv-cache uv run pytest tests/smoke/test_health.py tests/documents/test_api.py -q",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-31T05:22:32Z",
+      "summary": "12 focused schema and document upload tests passed."
+    },
+    {
+      "command": "UV_CACHE_DIR=/tmp/ravid-uv-cache uv run python manage.py spectacular --file /tmp/ravid-schema-test.yml",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-31T05:22:32Z",
+      "summary": "Schema generated without warnings; upload multipart request references required binary UploadRequest.file."
+    },
+    {
+      "command": "UV_CACHE_DIR=/tmp/ravid-uv-cache uv run pytest -q",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-31T05:22:32Z",
+      "summary": "240 tests passed and 3 were skipped; zero failures."
+    },
+    {
+      "command": "UV_CACHE_DIR=/tmp/ravid-uv-cache uv run ruff check apps config tests",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-31T05:22:32Z",
+      "summary": "The CI-authoritative Ruff scope passed."
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass",
+      "exitCode": 0,
+      "timestamp": "2026-08-31T05:22:32Z",
+      "summary": "No whitespace errors were found in the worktree diff."
+    }
+  ],
+  "beforeAfter": {
+    "before": "Upload.file was emitted as a URI string and Swagger UI rendered a text field.",
+    "after": "UploadRequest.file is emitted as a required binary string for multipart upload."
+  }
+}

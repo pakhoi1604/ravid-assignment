@@ -1,0 +1,10 @@
+{
+  "highRisk": true,
+  "reasons": [
+    "The change modifies the public OpenAPI contract schema-wide.",
+    "Request component names and JWT request/response component shapes change for external schema consumers."
+  ],
+  "autoStopRequired": true,
+  "humanApproved": true,
+  "largeDiff": false
+}

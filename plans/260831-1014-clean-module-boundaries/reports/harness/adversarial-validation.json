@@ -1,0 +1,10 @@
+{
+  "decision": "PASS",
+  "disprovenClaims": [],
+  "unverifiedClaims": [
+    "Chroma ownership check and upsert are not atomic under a privileged concurrent writer",
+    "the exact foreign-ID collision regression is embedded-Chroma rather than HTTP-Chroma"
+  ],
+  "missingProof": [],
+  "reachableRegressions": []
+}
