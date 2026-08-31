@@ -115,6 +115,7 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Document RAG backend foundation.",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

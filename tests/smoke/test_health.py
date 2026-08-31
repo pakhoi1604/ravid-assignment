@@ -18,8 +18,19 @@ def test_openapi_schema_is_public(client):
     responses = response.data["paths"]["/api/chat/query/"]["post"]["responses"]
     assert {"200", "400", "401", "403", "429", "503"} <= set(responses)
 
+    upload_request = response.data["paths"]["/api/documents/upload/"]["post"]["requestBody"]
+    upload_schema = upload_request["content"]["multipart/form-data"]["schema"]
+    assert upload_schema == {"$ref": "#/components/schemas/UploadRequest"}
+
     schemas = response.data["components"]["schemas"]
-    request_schema = schemas["ChatQuery"]
+    upload_component = schemas["UploadRequest"]
+    assert upload_component["properties"]["file"] == {
+        "type": "string",
+        "format": "binary",
+    }
+    assert upload_component["required"] == ["file"]
+
+    request_schema = schemas["ChatQueryRequest"]
     assert request_schema["properties"]["use_hyde"] == {
         "type": "boolean",
         "default": False,
