@@ -18,22 +18,24 @@ migrations:
 test:
 	uv run pytest
 
-compose-config:
+conf:
 	docker compose config --quiet
 
-compose-build:
+build:
 	docker compose build
 
-compose-up:
+up:
 	docker compose up -d
 
-compose-down:
+down:
 	docker compose down
 
-load-test-accounts:
+#load_test_accounts
+load:
 	docker compose exec -e ALLOW_TEST_ACCOUNT_SEED=true web python manage.py load_test_accounts
 
-load-test-accounts-local:
+#load_test_accounts
+load-local:
 	ALLOW_TEST_ACCOUNT_SEED=true uv run python manage.py load_test_accounts --settings=config.settings.local
 
 smoke:
