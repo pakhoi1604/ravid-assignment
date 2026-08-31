@@ -63,6 +63,8 @@ answer generation, or HyDE.
 - Blocking prerequisite: `plans/260830-1740-langchain-dependency-refresh/` refreshes and validates
   the LangChain/Chroma runtime before reusable endpoint smoke tooling is finalized.
 - Completed prerequisite: `plans/260830-1329-document-management-vector-storage/`.
+- Coordination only: `plans/260831-1306-harden-docker-reviewer-stack/` also edits `Makefile` and
+  `README.md`; whichever plan runs second must preserve the first plan's commands and documentation.
 - Existing Docker stack: `docker compose up -d` with `web`, `db`, `redis`, `celery`, and `chroma`.
 - Existing seed command: `make load-test-accounts`.
 - Existing test account: `reviewer` / `reviewer-password-123`.
