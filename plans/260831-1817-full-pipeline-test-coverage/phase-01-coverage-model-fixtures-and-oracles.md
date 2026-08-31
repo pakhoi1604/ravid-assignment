@@ -24,15 +24,18 @@ oracle và test markers cho L0-L4. Không dùng assignment PDF/private upload l�
 
 - Functional: fixture PDF/TXT/MD valid và invalid; factories cho owner/subscription/job/generation;
   oracle đọc HTTP, DB, media, Chroma, quota; fault hook deterministic theo stage.
+- Functional: Compose-local OpenRouter-compatible stub có scripted responses, authenticated
+  reset/ledger API và không có egress; test profile có short recovery timings hợp lệ.
 - Non-functional: hermetic, seeded/repeatable, parallel-safe, bounded timeout, cleanup idempotent;
   secret/private text không xuất hiện trong log/report.
 
 ## Architecture
 
 `pytest` fixtures tạo run namespace và synthetic fact duy nhất. L0 inject adapter fake có call ledger;
-L1 dùng PostgreSQL/Chroma thật; L2 driver gọi HTTP và poll DB-backed status. Oracle không lấy Celery
-result backend làm nguồn sự thật. Failure injector chỉ nằm trong test seam hiện có, không thêm flag
-test vào production code.
+L1 dùng PostgreSQL/Chroma thật. L2 driver gọi HTTP; OpenRouter base URL trỏ tới stub network service
+và ledger tồn tại ngoài Gunicorn process. Oracle không lấy Celery result backend làm nguồn sự thật.
+Stage-precise failpoint chỉ thuộc L0/L1; L2 chỉ dùng dependency proxy/process kill có transition
+oracle quan sát được, không giả vờ monkeypatch điều khiển Celery child.
 
 ## Related Code Files
 
@@ -41,6 +44,8 @@ test vào production code.
 | Create | `/home/khoipham/Projects/ravid-assignment/Ravid/tests/fixtures/pipeline/` | safe fixtures + corrupt generators | mọi phase |
 | Modify | `/home/khoipham/Projects/ravid-assignment/Ravid/tests/conftest.py` | factories, markers, cleanup | toàn suite |
 | Create | `/home/khoipham/Projects/ravid-assignment/Ravid/tests/pipeline/helpers.py` | polling/oracles/fault ledger | L1-L3 |
+| Create | `/home/khoipham/Projects/ravid-assignment/Ravid/tests/stubs/openrouter/` | HTTP-compatible provider + ledger | L2 |
+| Create | `/home/khoipham/Projects/ravid-assignment/Ravid/compose.pipeline-test.yaml` | stub, ports, collection, timing profile | L2 |
 | Modify | `/home/khoipham/Projects/ravid-assignment/Ravid/pyproject.toml` | test marker config | test collection |
 | Read | `/home/khoipham/Projects/ravid-assignment/Ravid/config/settings/test.py` | SQLite/eager baseline | lane split |
 
@@ -72,6 +77,10 @@ Phối hợp fixture/script với `260830-1608-part-1-endpoint-smoke-tests`, kh�
 | FX-08 | P0 | L0-L2 | test rerun/xdist | no shared rows/files/collections | isolation self-test |
 | FX-09 | P0 | all | secret-like canary/private phrase | absent from logs/JUnit/evidence | redaction assertion |
 | FX-10 | P2 | L4 | monotonic timing + resource snapshot | comparable JSON schema | evidence helper test |
+| FX-11 | P0 | L2 | two Gunicorn workers call provider stub | scripted response + exact shared ledger | stub contract |
+| FX-12 | P0 | L1-L2 | unique collection/project/dynamic ports | no default collection or fixed-port collision | topology contract |
+| FX-13 | P0 | L2 | short task/lease/Beat settings | config valid; killed job recovers <=120s | recovery profile |
+| FX-14 | P0 | all | scenario marked L1 vs L2 | report names exact topology/process owner | manifest lint |
 
 ## Implementation Steps
 
@@ -81,6 +90,9 @@ Phối hợp fixture/script với `260830-1608-part-1-endpoint-smoke-tests`, kh�
 4. Xây bounded poller, DB/media/vector/quota oracle và provider/fault call ledger.
 5. Đăng ký markers `unit`, `postgres`, `chroma`, `compose`, `live_provider`, `performance`.
 6. Thêm self-tests cho fixtures/helpers trước khi phase sau dùng.
+7. Xây provider stub không egress, reset/ledger token theo run; kiểm response/usage/error scripts.
+8. Tạo Compose override: ephemeral web/Flower ports, per-run Chroma collection, coherent short
+   `CELERY_TASK_TIME_LIMIT`/lease/stale/Beat cadence và discovery bằng `docker compose port`.
 
 ## Commands / Gates
 
@@ -96,17 +108,11 @@ uv run ruff check tests pyproject.toml
 - [ ] Helper không phụ thuộc timing ngẫu nhiên; timeout hữu hạn và output redacted.
 - [ ] Resource isolation/cleanup chạy lại hai lần không đổi kết quả.
 - [ ] Mọi scenario phase 2-7 trỏ tới fixture/oracle cụ thể.
+- [ ] L2 ledger/fault control hoạt động qua network/process boundary; không phụ thuộc monkeypatch.
+- [ ] Interrupted cleanup chỉ xóa project/collection/volume được run manifest sở hữu.
 
 ## Risk Assessment
 
 Fixture PDF quá lớn làm suite chậm: sinh theo test và cache artifact safe. Fake quá xa production:
 giới hạn fake ở fault/call ledger, bắt buộc L1/L2 cho invariant. Security: không dump JWT, API key,
 prompt hoặc chunks; chmod temp artifact và redact trước khi lưu evidence.
-
-## Implementation Steps
-
-<!-- Detailed steps -->
-
-## Success Criteria
-
-- [ ] ...

@@ -18,16 +18,14 @@ enforcement. Billing and payment are intentionally out of scope.
    ```bash
    cp .env.example .env
    ```
-
-   The example file contains local-only placeholders. Replace `SECRET_KEY`,
-   `POSTGRES_PASSWORD`, and `FLOWER_BASIC_AUTH` before sharing or running outside a private
-   workstation. Add an OpenRouter API key only when exercising live chat. The configured
-   `openrouter/free` router requires an OpenRouter account and API key, but no paid subscription.
+   The example file contains local-only placeholders. Set `OPENROUTER_API_KEY` when exercising
+   live chat. Replace `SECRET_KEY`, `POSTGRES_PASSWORD`, and `FLOWER_BASIC_AUTH` before sharing the
+   environment or running outside a private reviewer workstation.
 
 2. Build and start the stack:
 
    ```bash
-   make conf
+   make conf  # Optional: validate the resolved Compose configuration
    make build
    make up
    ```
@@ -45,62 +43,138 @@ enforcement. Billing and payment are intentionally out of scope.
    curl --fail --silent --show-error --output /dev/null --user ravid:change-me http://localhost:5555/api/workers
    ```
 
-   Swagger UI is available at `http://localhost:8000/api/docs/`. Flower is bound to loopback at
-   `http://localhost:5555/`.
+   Flower is bound to loopback at `http://localhost:5555/`.
 
-   Load local-only, non-admin test accounts and obtain a JWT:
+4. Seed the local-only, non-admin test accounts:
 
    ```bash
    make load
-   curl --fail --silent --show-error \
-     -X POST http://localhost:8000/api/auth/token/ \
-     -H "Content-Type: application/json" \
-     -d '{"username":"reviewer","password":"reviewer-password-123"}'
+   ```
+  Use one of username and password pair to login
+
+   ```json
+      {
+      "accounts": [
+        {
+          "username": "reviewer",
+          "email": "reviewer@example.com",
+          "password": "reviewer-password-123",
+          "is_staff": false,
+          "is_superuser": false,
+          "subscription_active": true,
+          "daily_token_limit": 20000
+        },
+        {
+          "username": "reviewer_alt",
+          "email": "reviewer-alt@example.com",
+          "password": "reviewer-alt-password-123",
+          "is_staff": false,
+          "is_superuser": false,
+          "subscription_active": true,
+          "daily_token_limit": 20000
+        },
+        {
+          "username": "reviewer_no_tokens",
+          "email": "reviewer-no-tokens@example.com",
+          "password": "reviewer-no-tokens-password-123",
+          "is_staff": false,
+          "is_superuser": false,
+          "subscription_active": true,
+          "daily_token_limit": 20000,
+          "daily_tokens_used": 20000
+        },
+        {
+          "username": "reviewer_unsubscribed",
+          "email": "reviewer-unsubscribed@example.com",
+          "password": "reviewer-unsubscribed-password-123",
+          "is_staff": false,
+          "is_superuser": false,
+          "subscription_active": false,
+          "daily_token_limit": 20000
+        },
+        {
+          "username": "reviewer_insufficient_tokens",
+          "email": "reviewer-insufficient-tokens@example.com",
+          "password": "reviewer-insufficient-tokens-password-123",
+          "is_staff": false,
+          "is_superuser": false,
+          "subscription_active": true,
+          "daily_token_limit": 20000,
+          "daily_tokens_used": 19999
+        }
+      ]
+    }
+
    ```
 
-   Copy the `access` value from the token response. Upload the public-safe synthetic fixture and
-   poll until its status is `SUCCESS`. A newly accepted upload can truthfully report `PENDING`
-   before the outbox publisher hands it to Celery:
+### Test with Swagger UI
 
-   ```bash
-   curl --fail --silent --show-error \
-     -X POST http://localhost:8000/api/documents/upload/ \
-     -H "Authorization: Bearer <access-token>" \
-     -F "file=@tests/fixtures/rag/reviewer-handbook.md"
-   curl --fail --silent --show-error \
-     "http://localhost:8000/api/documents/status/?task_id=<task-id>" \
-     -H "Authorization: Bearer <access-token>"
+1. Confirm `make load` completed successfully, then open
+   `http://localhost:8000/api/docs/`.
+2. Expand `POST /api/auth/token/`, select **Try it out**, and submit:
+
+   ```json
+   {"username":"reviewer","password":"reviewer-password-123"}
    ```
 
-   Query the indexed fact with standard retrieval (`use_hyde` is optional and defaults to `false`):
+   Select **Execute**, then copy the `access` value from the response. Do not use `refresh`.
+3. Select **Authorize** at the top of Swagger UI, paste only the access token, then select
+   **Authorize** and **Close**. The OpenAPI security scheme is HTTP bearer, so Swagger adds the
+   `Bearer` prefix automatically.
+4. Expand `POST /api/documents/upload/`, select **Try it out**, choose the public-safe fixture
+   `tests/fixtures/rag/reviewer-handbook.md`, and select **Execute**. Expect `202 Accepted`; copy
+   `task_id` from the response.
+5. Expand `GET /api/documents/status/`, select **Try it out**, enter the copied `task_id`, and select
+   **Execute**. Repeat until the status is `SUCCESS`. `PENDING` and `PROCESSING` are normal while
+   ingestion is running; if it reaches `FAILURE`, inspect the response's `error` field.
+6. Expand `POST /api/chat/query/`, select **Try it out**, and submit:
 
-   ```bash
-   curl --fail --silent --show-error \
-     -X POST http://localhost:8000/api/chat/query/ \
-     -H "Authorization: Bearer <access-token>" \
-     -H "Content-Type: application/json" \
-     -d '{"query":"What color is the Atlas emergency binder?","use_hyde":false}'
+   ```json
+   {"query":"What color is the Atlas emergency binder?","use_hyde":false}
    ```
 
-   To exercise HyDE, send the same request with `"use_hyde":true`. The field is a strict JSON
-   boolean: strings, numbers, `null`, arrays, and objects are rejected with `400` rather than
-   coerced.
+   Select **Execute**. The answer should identify the binder as cobalt blue. Change `use_hyde` to
+   `true` to exercise HyDE retrieval.
 
-   Every successful response contains `answer` and `retrieval_metadata`. Standard retrieval reports
-   `mode: "standard"`, a null `hypothetical_passage`, and a null `fallback_reason`. Successful HyDE
-   reports `mode: "hyde"`, the bounded hypothetical passage, and a null fallback reason. If expected
-   HyDE generation failure or its timeout occurs, the request continues with standard retrieval and
-   reports `mode: "standard"`, `hypothetical_passage: null`, and
-   `fallback_reason: "hyde_unavailable"`.
+Common Swagger issues:
 
-   `retrieved_chunks_count` and `retrieved_chunks` expose, in order, the bounded owner-scoped excerpts
-   actually supplied to final answer synthesis. These fields can contain private document text; do
-   not log responses or use unapproved documents for live requests. The `answer` should identify the
-   binder as cobalt blue. If no owner-scoped context is found, the endpoint returns a fixed safe
-   answer without final-answer generation. Standard no-context requests consume no local daily
-   quota; a HyDE request still retains any quota consumed by its separate generation stage.
+- `401`: authorize again with the `access` token. Paste only the token; do not type `Bearer` twice.
+- `503`: verify `OPENROUTER_API_KEY` and provider availability.
+- A query sent before ingestion reaches `SUCCESS` can return the safe no-context answer.
 
-4. Stop containers without deleting persisted data:
+### Alternative CLI workflow
+
+The same reviewer flow can be run with `curl`:
+
+```bash
+curl --fail --silent --show-error \
+  -X POST http://localhost:8000/api/auth/token/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"reviewer","password":"reviewer-password-123"}'
+curl --fail --silent --show-error \
+  -X POST http://localhost:8000/api/documents/upload/ \
+  -H "Authorization: Bearer <access-token>" \
+  -F "file=@tests/fixtures/rag/reviewer-handbook.md"
+curl --fail --silent --show-error \
+  "http://localhost:8000/api/documents/status/?task_id=<task-id>" \
+  -H "Authorization: Bearer <access-token>"
+curl --fail --silent --show-error \
+  -X POST http://localhost:8000/api/chat/query/ \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What color is the Atlas emergency binder?","use_hyde":false}'
+```
+
+Replace `<access-token>` and `<task-id>` with values from the preceding responses, and poll status
+until `SUCCESS` before querying. Set `use_hyde` to the JSON boolean `true` to test HyDE; other JSON
+types are rejected with `400`.
+
+Successful queries contain `answer` and `retrieval_metadata`. Returned chunks can contain private
+document text, so use only synthetic or approved documents and do not log live responses. Standard
+no-context queries do not consume local daily quota; HyDE queries retain quota already consumed by
+their separate generation stage.
+
+5. Stop containers without deleting persisted data:
 
    ```bash
    make down
