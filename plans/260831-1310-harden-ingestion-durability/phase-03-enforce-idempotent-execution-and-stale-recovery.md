@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Enforce Idempotent Execution and Stale Recovery"
-status: pending
+status: completed
 priority: P1
 dependencies: [2]
 ---
@@ -95,10 +95,10 @@ assignment volumes are intentionally reset.
 
 ## Success Criteria
 
-- [ ] Duplicate deliveries perform no vector or terminal-state mutation.
-- [ ] Stale jobs have bounded generation-rotating recovery.
-- [ ] Dispatch failure is observable and recoverable.
-- [ ] Thresholds are coherent with the Celery hard limit.
+- [x] Duplicate deliveries perform no vector or terminal-state mutation.
+- [x] Stale jobs have bounded generation-rotating recovery.
+- [x] Dispatch failure is observable and recoverable.
+- [x] Thresholds are coherent with the Celery hard limit.
 
 ## Risk Assessment
 

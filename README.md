@@ -1,8 +1,8 @@
 # RAVID Backend
 
 Runnable Django/DRF backend for the RAVID document knowledge-base assignment. This repository
-supports authenticated document upload, asynchronous ingestion status, extraction, chunking, and
-Chroma vector indexing. It also provides owner-scoped retrieval, a grounded chat endpoint backed by
+supports authenticated document upload, durable asynchronous ingestion status, extraction, chunking,
+and Chroma vector indexing. It also provides owner-scoped retrieval, a grounded chat endpoint backed by
 OpenRouter free-tier models, optional HyDE retrieval, and local subscription/daily-token
 enforcement. Billing and payment are intentionally out of scope.
 
@@ -27,8 +27,9 @@ enforcement. Billing and payment are intentionally out of scope.
 2. Build and start the stack:
 
    ```bash
-   docker compose build
-   docker compose up -d
+   make conf
+   make build
+   make up
    ```
 
 3. Verify the public reviewer URLs:
@@ -50,7 +51,7 @@ enforcement. Billing and payment are intentionally out of scope.
    Load local-only, non-admin test accounts and obtain a JWT:
 
    ```bash
-   make load-test-accounts
+   make load
    curl --fail --silent --show-error \
      -X POST http://localhost:8000/api/auth/token/ \
      -H "Content-Type: application/json" \
@@ -58,7 +59,8 @@ enforcement. Billing and payment are intentionally out of scope.
    ```
 
    Copy the `access` value from the token response. Upload the public-safe synthetic fixture and
-   poll until its status is `SUCCESS`:
+   poll until its status is `SUCCESS`. A newly accepted upload can truthfully report `PENDING`
+   before the outbox publisher hands it to Celery:
 
    ```bash
    curl --fail --silent --show-error \
@@ -101,7 +103,7 @@ enforcement. Billing and payment are intentionally out of scope.
 4. Stop containers without deleting persisted data:
 
    ```bash
-   docker compose down
+   make down
    ```
 
 ## Local Development Path
@@ -116,17 +118,20 @@ uv run python manage.py runserver
 ```
 
 The local settings use SQLite and eager Celery, so unit/API tests do not require PostgreSQL, Redis,
-Chroma, or an OpenRouter key. Provider and vector-store boundaries are mocked in deterministic
-tests. The Docker image installs the vector-ingestion and RAG runtime used by the web and worker
-containers.
+Chroma, or an OpenRouter key. Provider, dispatch, recovery, and vector-store boundaries are mocked
+in deterministic tests. The Docker image installs the vector-ingestion and RAG runtime used by the
+web, worker, and Beat containers.
 
 Maintainer-facing module ownership is intentionally local to each Django app:
 
-- `apps/documents/ingestion.py` orchestrates extraction, chunking, and vector replacement;
+- `apps/documents/ingestion.py` orchestrates extraction, chunking, and generation-qualified vector writes;
   `contracts.py`, `constants.py`, and `exceptions.py` are dependency-free definitions used by its
   leaf modules.
-- `apps/documents/vector_store.py` owns trusted owner/document write validation, stale-chunk
-  replacement, native owner filtering, and fail-closed result validation.
+- `apps/documents/vector_store.py` owns trusted owner/document/generation write validation,
+  exact write readback, native owner/generation filtering, exact generation cleanup, and
+  fail-closed result validation.
+- `apps/documents/dispatch.py`, `recovery.py`, and `retrieval.py` own the ingestion outbox,
+  stale-job/legacy-generation recovery, and active-generation retrieval facade respectively.
 - `apps/rag/services.py` orchestrates the query use case; `contracts.py`, `provider_responses.py`,
   `accounting.py`, and `prompts.py` own their focused concerns.
 
@@ -143,7 +148,7 @@ PyTorch CPU-only index because document embeddings do not require a GPU runtime.
 Load the same test accounts locally with:
 
 ```bash
-make load-test-accounts-local
+make load-local
 ```
 
 JWT access tokens are configured for reviewer convenience and last 7 days by default. Override
@@ -184,6 +189,27 @@ Relevant RAG environment settings (defaults shown) are:
 | `RAG_PROVIDER_TIMEOUT_MS` | `10000` | Final-answer provider timeout. |
 | `RAG_PROVIDER_MAX_RETRIES` | `0` | Required no-retry policy; other values fail configuration. |
 
+Relevant ingestion durability settings are:
+
+| Setting | Default | Purpose |
+| --- | ---: | --- |
+| `INGESTION_MAX_PDF_PAGES` | `200` | PDF page ceiling before extraction continues. |
+| `INGESTION_MAX_EXTRACTED_CHARS` | `2000000` | Plain-text/PDF extracted character ceiling. |
+| `INGESTION_MAX_CHUNKS` | `2500` | Maximum chunks before embedding/vector writes. |
+| `INGESTION_STALE_PENDING_SECONDS` | `300` | Operator recovery threshold for un-dispatched pending jobs. |
+| `INGESTION_STALE_PROCESSING_SECONDS` | `2100` | Processing recovery threshold; must exceed the Celery hard time limit plus safety margin. |
+| `INGESTION_LEASE_SAFETY_SECONDS` | `300` | Extra lease margin beyond the Celery hard time limit. |
+| `INGESTION_MAX_RECOVERY_ATTEMPTS` | `3` | Maximum automatic generation rotations before manual intervention. |
+| `INGESTION_OUTBOX_MAX_ATTEMPTS` | `5` | Maximum broker publication attempts before an outbox row becomes `DEAD`. |
+| `INGESTION_OUTBOX_CLAIM_SECONDS` | `60` | Publisher claim lease duration. |
+| `INGESTION_OUTBOX_BACKOFF_SECONDS` | `30` | Retry delay after broker publish failure. |
+| `INGESTION_CLEANUP_GRACE_SECONDS` | `2100` | Delay before stale generation vectors can be deleted. |
+| `INGESTION_CLEANUP_MAX_ATTEMPTS` | `5` | Maximum cleanup failures before manual intervention. |
+| `INGESTION_CLEANUP_BACKOFF_SECONDS` | `300` | Retry delay after cleanup failure. |
+| `INGESTION_ORPHAN_UPLOAD_GRACE_SECONDS` | `3600` | Minimum age before orphan media reconciliation can delete files. |
+| `INGESTION_OUTBOX_PUBLISH_INTERVAL_SECONDS` | `10` | Beat cadence for outbox publishing. |
+| `INGESTION_RECOVERY_INTERVAL_SECONDS` | `60` | Beat cadence for stale recovery and cleanup. |
+
 With HyDE enabled, quota accounting has two independent reservations. Dispatched HyDE generation
 settles first (timeouts conservatively charge its reserved bound); final synthesis reserves and
 settles only after real chunks are found, and can therefore return `429` after HyDE usage has already
@@ -191,9 +217,9 @@ been charged. HyDE usage is not refunded when later retrieval is empty or final 
 
 ## Checks
 
-`make sync`, `make lint`, `make check`, `make migrations`, `make test`, and
-`make compose-config`, and `make load-test-accounts` are thin wrappers around the authoritative
-commands used by CI and the reviewer path.
+`make sync`, `make lint`, `make check`, `make migrations`, `make test`, `make conf`, `make build`,
+`make up`, `make down`, `make load`, and `make load-local` are thin wrappers around the
+authoritative commands used by CI and the reviewer path.
 
 The profile-gated test image includes dev dependencies while normal runtime services do not. The
 two infrastructure-backed invariant tests can be run with:
@@ -207,12 +233,33 @@ docker compose --profile test run --rm test \
   pytest --ds=config.settings.production tests/documents/test_vector_retrieval_chroma.py -q
 ```
 
+## Ingestion Operations
+
+Uploads commit the `Document`, `IngestionJob`, and `IngestionDispatch` outbox row in one database
+transaction. The web request does not publish to the broker. Celery Beat runs
+`publish_ingestion_dispatches` and `recover_ingestion_work`; the same flows are available as
+operator commands:
+
+```bash
+uv run python manage.py publish_ingestion_dispatches --limit 100
+uv run python manage.py recover_ingestion_jobs --limit 100 --dry-run
+uv run python manage.py cleanup_ingestion_generations --limit 100
+uv run python manage.py reindex_legacy_documents --limit 100 --dry-run
+uv run python manage.py reconcile_orphan_uploads --limit 100 --dry-run
+```
+
+Live deployments with generation-less legacy vectors must block chat traffic, run migrations, then
+either reset volumes or run `reindex_legacy_documents` until no legacy successful jobs remain before
+serving generation-filtered retrieval. Roll back before serving chat if reindex verification fails.
+Dispatch is at least once: duplicate Celery deliveries are expected and fenced by job generation.
+
 ## Services
 
 - `web`: Django/DRF served by Gunicorn on `127.0.0.1:8000`.
 - `celery`: asynchronous worker using the same application image.
+- `beat`: Celery Beat scheduler for ingestion outbox publication, stale recovery, and cleanup.
 - `db`: PostgreSQL with a named volume.
-- `redis`: Celery broker and result backend.
+- `redis`: Celery broker and operational result backend; PostgreSQL owns visible ingestion state.
 - `chroma`: internal vector store service for document ingestion. The image is derived
   from pinned `chromadb/chroma:1.5.9` only to add `curl` for a real Compose health check. The Python
   client is pinned to the same version.

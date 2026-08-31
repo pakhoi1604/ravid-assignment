@@ -24,7 +24,10 @@ ALLOWED_DOCUMENT_IMPORTS = {
     "extraction": {"constants", "exceptions"},
     "vector_store": {"contracts", "exceptions"},
     "ingestion": {"chunking", "contracts", "exceptions", "extraction", "models", "vector_store"},
-    "tasks": {"exceptions", "ingestion", "models"},
+    "retrieval": {"exceptions", "models", "vector_store"},
+    "dispatch": {"models", "tasks"},
+    "recovery": {"dispatch", "exceptions", "models", "vector_store"},
+    "tasks": {"dispatch", "exceptions", "ingestion", "models", "recovery"},
 }
 
 
@@ -75,7 +78,10 @@ def test_document_contract_and_validation_constants_have_one_owner():
         "apps.documents.chunking",
         "apps.documents.extraction",
         "apps.documents.vector_store",
+        "apps.documents.retrieval",
         "apps.documents.ingestion",
+        "apps.documents.dispatch",
+        "apps.documents.recovery",
         "apps.documents.tasks",
     ],
 )

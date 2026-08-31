@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Define Durable Ingestion State"
-status: pending
+status: completed
 priority: P1
 dependencies: []
 ---
@@ -77,10 +77,10 @@ changes the job to `PENDING`; it is not a replay of `SUCCESS`.
 
 ## Success Criteria
 
-- [ ] Schema supports fencing and an authoritative active-generation pointer.
-- [ ] Status endpoint reports `PENDING` truthfully without changing auth/ownership behavior.
-- [ ] Migration never imports or calls Chroma/Celery.
-- [ ] Existing upload and terminal status tests pass.
+- [x] Schema supports fencing and an authoritative active-generation pointer.
+- [x] Status endpoint reports `PENDING` truthfully without changing auth/ownership behavior.
+- [x] Migration never imports or calls Chroma/Celery.
+- [x] Existing upload and terminal status tests pass.
 
 ## Risk Assessment
 

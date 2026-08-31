@@ -20,6 +20,7 @@ def test_owner_scoped_retriever_uses_exact_integer_filter(monkeypatch):
 
     result = vector_store.as_retriever_for_user(
         user_id=42,
+        active_generations=("gen",),
         k=4,
         search_type="similarity",
     )
@@ -28,7 +29,10 @@ def test_owner_scoped_retriever_uses_exact_integer_filter(monkeypatch):
     assert calls == [
         {
             "search_type": "similarity",
-            "search_kwargs": {"k": 4, "filter": {"user_id": 42}},
+            "search_kwargs": {
+                "k": 4,
+                "filter": {"$and": [{"user_id": {"$eq": 42}}, {"generation": {"$in": ["gen"]}}]},
+            },
         }
     ]
 
@@ -46,6 +50,7 @@ def test_owner_scoped_retriever_supports_score_threshold_search(monkeypatch):
 
     vector_store.as_retriever_for_user(
         user_id=42,
+        active_generations=("gen",),
         k=4,
         search_type="similarity_score_threshold",
         score_threshold=0.5,
@@ -56,7 +61,7 @@ def test_owner_scoped_retriever_supports_score_threshold_search(monkeypatch):
             "search_type": "similarity_score_threshold",
             "search_kwargs": {
                 "k": 4,
-                "filter": {"user_id": 42},
+                "filter": {"$and": [{"user_id": {"$eq": 42}}, {"generation": {"$in": ["gen"]}}]},
                 "score_threshold": 0.5,
             },
         }
@@ -76,6 +81,7 @@ def test_owner_scoped_retriever_supports_mmr_search(monkeypatch):
 
     vector_store.as_retriever_for_user(
         user_id=42,
+        active_generations=("gen",),
         k=4,
         search_type="mmr",
         fetch_k=16,
@@ -84,7 +90,11 @@ def test_owner_scoped_retriever_supports_mmr_search(monkeypatch):
     assert calls == [
         {
             "search_type": "mmr",
-            "search_kwargs": {"k": 4, "filter": {"user_id": 42}, "fetch_k": 16},
+            "search_kwargs": {
+                "k": 4,
+                "filter": {"$and": [{"user_id": {"$eq": 42}}, {"generation": {"$in": ["gen"]}}]},
+                "fetch_k": 16,
+            },
         }
     ]
 
@@ -92,24 +102,38 @@ def test_owner_scoped_retriever_supports_mmr_search(monkeypatch):
 @pytest.mark.parametrize("user_id", [True, "42", None])
 def test_owner_scoped_retriever_rejects_invalid_user_id(user_id):
     with pytest.raises(ValueError, match="user_id"):
-        DocumentVectorStore().as_retriever_for_user(user_id=user_id, k=4)
+        DocumentVectorStore().as_retriever_for_user(
+            user_id=user_id,
+            active_generations=("gen",),
+            k=4,
+        )
 
 
 @pytest.mark.parametrize("k", [True, 0, -1, 1.5])
 def test_owner_scoped_retriever_rejects_invalid_k(k):
     with pytest.raises(ValueError, match="k"):
-        DocumentVectorStore().as_retriever_for_user(user_id=1, k=k)
+        DocumentVectorStore().as_retriever_for_user(
+            user_id=1,
+            active_generations=("gen",),
+            k=k,
+        )
 
 
 def test_owner_scoped_retriever_rejects_unsupported_search_type():
     with pytest.raises(ValueError, match="search_type"):
-        DocumentVectorStore().as_retriever_for_user(user_id=1, k=4, search_type="hybrid")
+        DocumentVectorStore().as_retriever_for_user(
+            user_id=1,
+            active_generations=("gen",),
+            k=4,
+            search_type="hybrid",
+        )
 
 
 def test_score_threshold_search_requires_float_threshold():
     with pytest.raises(ValueError, match="score_threshold"):
         DocumentVectorStore().as_retriever_for_user(
             user_id=1,
+            active_generations=("gen",),
             k=4,
             search_type="similarity_score_threshold",
         )
@@ -120,6 +144,7 @@ def test_score_threshold_search_requires_finite_unit_interval(score_threshold):
     with pytest.raises(ValueError, match="between 0 and 1"):
         DocumentVectorStore().as_retriever_for_user(
             user_id=1,
+            active_generations=("gen",),
             k=4,
             search_type="similarity_score_threshold",
             score_threshold=score_threshold,
@@ -130,6 +155,7 @@ def test_mmr_search_rejects_fetch_k_smaller_than_k():
     with pytest.raises(ValueError, match="fetch_k"):
         DocumentVectorStore().as_retriever_for_user(
             user_id=1,
+            active_generations=("gen",),
             k=4,
             search_type="mmr",
             fetch_k=3,
@@ -152,6 +178,7 @@ def test_retrieve_for_user_uses_explicit_search_policy(monkeypatch):
     vector_store.retrieve_for_user(
         user_id=1,
         query="query",
+        active_generations=("gen",),
         k=4,
         search_type="mmr",
         score_threshold=0.4,
@@ -161,6 +188,7 @@ def test_retrieve_for_user_uses_explicit_search_policy(monkeypatch):
     assert calls == [
         {
             "user_id": 1,
+            "active_generations": ("gen",),
             "k": 4,
             "search_type": "mmr",
             "score_threshold": 0.4,
@@ -178,7 +206,7 @@ def test_owner_scoped_retriever_normalizes_store_construction_failure(monkeypatc
     monkeypatch.setattr(vector_store, "_build_store", fail)
 
     with pytest.raises(VectorRetrievalError, match="unavailable"):
-        vector_store.as_retriever_for_user(user_id=1, k=4)
+        vector_store.as_retriever_for_user(user_id=1, active_generations=("gen",), k=4)
 
 
 def test_owner_scoped_retriever_normalizes_locked_chroma_connection_failure(monkeypatch):
@@ -190,7 +218,11 @@ def test_owner_scoped_retriever_normalizes_locked_chroma_connection_failure(monk
     monkeypatch.setattr(chromadb, "HttpClient", fail_http_client)
 
     with pytest.raises(VectorRetrievalError, match="unavailable"):
-        DocumentVectorStore().as_retriever_for_user(user_id=1, k=4)
+        DocumentVectorStore().as_retriever_for_user(
+            user_id=1,
+            active_generations=("gen",),
+            k=4,
+        )
 
 
 def test_owner_scoped_retriever_normalizes_collection_construction_failure(monkeypatch):
@@ -213,7 +245,7 @@ def test_owner_scoped_retriever_normalizes_collection_construction_failure(monke
     with pytest.raises(VectorRetrievalError, match="unavailable"):
         DocumentVectorStore(
             collection_name="collection-construction-failure"
-        ).as_retriever_for_user(user_id=1, k=4)
+        ).as_retriever_for_user(user_id=1, active_generations=("gen",), k=4)
 
 
 def test_owner_scoped_retriever_normalizes_embedding_cache_failure(monkeypatch):
@@ -230,6 +262,7 @@ def test_owner_scoped_retriever_normalizes_embedding_cache_failure(monkeypatch):
     with pytest.raises(VectorRetrievalError, match="unavailable"):
         DocumentVectorStore(collection_name="embedding-cache-failure").as_retriever_for_user(
             user_id=1,
+            active_generations=("gen",),
             k=4,
         )
 
@@ -248,6 +281,7 @@ def test_store_construction_does_not_hide_unrelated_value_errors(monkeypatch):
     with pytest.raises(ValueError, match="implementation defect"):
         DocumentVectorStore(collection_name="programming-value-error").as_retriever_for_user(
             user_id=1,
+            active_generations=("gen",),
             k=4,
         )
 
@@ -281,14 +315,14 @@ def test_vector_store_resource_is_reused_within_process(monkeypatch):
 
     first = DocumentVectorStore(collection_name="cached-resource-test")
     second = DocumentVectorStore(collection_name="cached-resource-test")
-    first.as_retriever_for_user(user_id=1, k=4)
-    second.as_retriever_for_user(user_id=2, k=4)
+    first.as_retriever_for_user(user_id=1, active_generations=("gen",), k=4)
+    second.as_retriever_for_user(user_id=2, active_generations=("other",), k=4)
 
     assert calls == {"client": 1, "embeddings": 1, "store": 1}
 
 
 def test_retrieve_for_user_invokes_native_retriever(monkeypatch):
-    documents = [Document(page_content="safe", metadata={"user_id": 1})]
+    documents = [Document(page_content="safe", metadata={"user_id": 1, "generation": "gen"})]
 
     class Retriever:
         def invoke(self, query):
@@ -306,6 +340,7 @@ def test_retrieve_for_user_invokes_native_retriever(monkeypatch):
         vector_store.retrieve_for_user(
             user_id=1,
             query="What is the policy?",
+            active_generations=("gen",),
             k=4,
             search_type="similarity",
         )
@@ -313,7 +348,10 @@ def test_retrieve_for_user_invokes_native_retriever(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("metadata", [{}, {"user_id": "1"}, {"user_id": True}, {"user_id": 2}])
+@pytest.mark.parametrize(
+    "metadata",
+    [{}, {"user_id": "1"}, {"user_id": True}, {"user_id": 2}, {"user_id": 1}],
+)
 def test_retrieve_for_user_fails_closed_on_untrusted_result_metadata(monkeypatch, metadata):
     class Retriever:
         def invoke(self, query):
@@ -326,6 +364,7 @@ def test_retrieve_for_user_fails_closed_on_untrusted_result_metadata(monkeypatch
         vector_store.retrieve_for_user(
             user_id=1,
             query="query",
+            active_generations=("gen",),
             k=4,
             search_type="similarity",
         )
@@ -348,7 +387,13 @@ def test_retrieve_for_user_normalizes_only_chroma_failures(monkeypatch):
     monkeypatch.setattr(vector_store, "_chroma_error_type", lambda: ExpectedBackendError)
 
     with pytest.raises(VectorRetrievalError, match="unavailable"):
-        vector_store.retrieve_for_user(user_id=1, query="query", k=4, search_type="similarity")
+        vector_store.retrieve_for_user(
+            user_id=1,
+            query="query",
+            active_generations=("gen",),
+            k=4,
+            search_type="similarity",
+        )
 
 
 def test_retrieve_for_user_normalizes_http_transport_failures(monkeypatch):
@@ -364,7 +409,13 @@ def test_retrieve_for_user_normalizes_http_transport_failures(monkeypatch):
     )
 
     with pytest.raises(VectorRetrievalError, match="unavailable"):
-        vector_store.retrieve_for_user(user_id=1, query="query", k=4, search_type="similarity")
+        vector_store.retrieve_for_user(
+            user_id=1,
+            query="query",
+            active_generations=("gen",),
+            k=4,
+            search_type="similarity",
+        )
 
 
 def test_retrieve_for_user_normalizes_query_time_os_failures(monkeypatch):
@@ -380,7 +431,13 @@ def test_retrieve_for_user_normalizes_query_time_os_failures(monkeypatch):
     )
 
     with pytest.raises(VectorRetrievalError, match="unavailable"):
-        vector_store.retrieve_for_user(user_id=1, query="query", k=4, search_type="similarity")
+        vector_store.retrieve_for_user(
+            user_id=1,
+            query="query",
+            active_generations=("gen",),
+            k=4,
+            search_type="similarity",
+        )
 
 
 def test_retrieve_for_user_does_not_hide_programming_errors(monkeypatch):
@@ -396,4 +453,29 @@ def test_retrieve_for_user_does_not_hide_programming_errors(monkeypatch):
     )
 
     with pytest.raises(TypeError, match="implementation defect"):
-        vector_store.retrieve_for_user(user_id=1, query="query", k=4, search_type="similarity")
+        vector_store.retrieve_for_user(
+            user_id=1,
+            query="query",
+            active_generations=("gen",),
+            k=4,
+            search_type="similarity",
+        )
+
+
+def test_retrieve_for_user_requires_active_generations():
+    with pytest.raises(ValueError, match="active_generations"):
+        DocumentVectorStore().retrieve_for_user(
+            user_id=1,
+            query="query",
+            k=4,
+            search_type="similarity",
+        )
+
+    with pytest.raises(ValueError, match="active_generations"):
+        DocumentVectorStore().retrieve_for_user(
+            user_id=1,
+            query="query",
+            active_generations=(),
+            k=4,
+            search_type="similarity",
+        )

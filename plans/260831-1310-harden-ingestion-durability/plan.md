@@ -1,7 +1,7 @@
 ---
 title: "Harden Ingestion Durability and Resource Bounds"
 description: "Make document ingestion replay-safe, recoverable, generation-aware, and bounded without changing the modular-monolith or public upload contract."
-status: pending
+status: completed
 priority: P1
 branch: "main"
 tags: [backend, database, celery, refactor, critical]
@@ -59,11 +59,11 @@ after activation and remain invisible if cleanup fails.
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Define Durable Ingestion State](./phase-01-define-durable-ingestion-state.md) | Pending |
-| 2 | [Implement Generation-Safe Vector Activation](./phase-02-implement-generation-safe-vector-activation.md) | Pending |
-| 3 | [Enforce Idempotent Execution and Stale Recovery](./phase-03-enforce-idempotent-execution-and-stale-recovery.md) | Pending |
-| 4 | [Add Transactional Dispatch Outbox](./phase-04-add-transactional-dispatch-outbox.md) | Pending |
-| 5 | [Bound Ingestion Work and Validate](./phase-05-bound-ingestion-work-and-validate.md) | Pending |
+| 1 | [Define Durable Ingestion State](./phase-01-define-durable-ingestion-state.md) | Completed |
+| 2 | [Implement Generation-Safe Vector Activation](./phase-02-implement-generation-safe-vector-activation.md) | Completed |
+| 3 | [Enforce Idempotent Execution and Stale Recovery](./phase-03-enforce-idempotent-execution-and-stale-recovery.md) | Completed |
+| 4 | [Add Transactional Dispatch Outbox](./phase-04-add-transactional-dispatch-outbox.md) | Completed |
+| 5 | [Bound Ingestion Work and Validate](./phase-05-bound-ingestion-work-and-validate.md) | Completed |
 
 ## Dependencies
 
