@@ -27,8 +27,9 @@ enforcement. Billing and payment are intentionally out of scope.
 2. Build and start the stack:
 
    ```bash
-   docker compose build
-   docker compose up -d
+   make conf
+   make build
+   make up
    ```
 
 3. Verify the public reviewer URLs:
@@ -50,7 +51,7 @@ enforcement. Billing and payment are intentionally out of scope.
    Load local-only, non-admin test accounts and obtain a JWT:
 
    ```bash
-   make load-test-accounts
+   make load
    curl --fail --silent --show-error \
      -X POST http://localhost:8000/api/auth/token/ \
      -H "Content-Type: application/json" \
@@ -101,7 +102,7 @@ enforcement. Billing and payment are intentionally out of scope.
 4. Stop containers without deleting persisted data:
 
    ```bash
-   docker compose down
+   make down
    ```
 
 ## Local Development Path
@@ -143,7 +144,7 @@ PyTorch CPU-only index because document embeddings do not require a GPU runtime.
 Load the same test accounts locally with:
 
 ```bash
-make load-test-accounts-local
+make load-local
 ```
 
 JWT access tokens are configured for reviewer convenience and last 7 days by default. Override
@@ -191,9 +192,9 @@ been charged. HyDE usage is not refunded when later retrieval is empty or final 
 
 ## Checks
 
-`make sync`, `make lint`, `make check`, `make migrations`, `make test`, and
-`make compose-config`, and `make load-test-accounts` are thin wrappers around the authoritative
-commands used by CI and the reviewer path.
+`make sync`, `make lint`, `make check`, `make migrations`, `make test`, `make conf`, `make build`,
+`make up`, `make down`, `make load`, and `make load-local` are thin wrappers around the
+authoritative commands used by CI and the reviewer path.
 
 The profile-gated test image includes dev dependencies while normal runtime services do not. The
 two infrastructure-backed invariant tests can be run with:
