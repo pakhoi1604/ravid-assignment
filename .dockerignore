@@ -17,7 +17,6 @@ htmlcov
 /media
 /staticfiles
 /chroma
-mockdata
 docs
 plans
 *.pdf

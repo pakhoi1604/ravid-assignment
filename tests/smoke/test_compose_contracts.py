@@ -57,7 +57,10 @@ def test_application_image_runs_as_non_root_user():
 def test_application_release_inputs_are_immutable():
     dockerfile = Path("docker/django/Dockerfile").read_text()
 
-    assert "# syntax=docker/dockerfile:1" in dockerfile.splitlines()[0]
+    assert dockerfile.splitlines()[0] == (
+        "# syntax=docker/dockerfile:1@sha256:"
+        "ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32"
+    )
     assert (
         "FROM python:3.12-slim@sha256:"
         "2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a AS base\n"
@@ -104,7 +107,6 @@ def test_runtime_copy_set_excludes_tests_but_test_target_includes_them():
     for required_copy in (
         "COPY manage.py ./",
         "COPY apps ./apps",
-        "COPY config ./config",
         "COPY docker/django/entrypoint.sh ./docker/django/entrypoint.sh",
     ):
         assert required_copy in runtime_stage
@@ -113,6 +115,23 @@ def test_runtime_copy_set_excludes_tests_but_test_target_includes_them():
     assert "COPY . ." not in dockerfile
     assert "COPY tests ./tests" not in runtime_stage
     assert "COPY tests ./tests" in test_stage
+    assert "COPY mockdata ./mockdata" not in runtime_stage
+    assert "COPY mockdata ./mockdata" in test_stage
+
+
+def test_runtime_copies_only_production_settings_but_test_keeps_all_settings():
+    dockerfile = Path("docker/django/Dockerfile").read_text()
+    runtime_stage = dockerfile_stage(dockerfile, "runtime", "test")
+    test_stage = dockerfile_stage(dockerfile, "test")
+
+    assert "COPY config ./config" not in runtime_stage
+    assert "COPY config ./config" in test_stage
+    assert "COPY config/*.py ./config/" in runtime_stage
+    assert "COPY config/settings/__init__.py ./config/settings/__init__.py" in runtime_stage
+    assert "COPY config/settings/base.py ./config/settings/base.py" in runtime_stage
+    assert "COPY config/settings/production.py ./config/settings/production.py" in runtime_stage
+    assert "config/settings/local.py" not in runtime_stage
+    assert "config/settings/test.py" not in runtime_stage
 
 
 def test_application_source_is_root_owned_with_narrow_writable_paths():
@@ -223,10 +242,10 @@ def test_build_context_excludes_local_and_runtime_irrelevant_artifacts():
         ".github",
         ".superpowers",
         "docs",
-        "mockdata",
         "plans",
     }
     expected_ignores.update({".env", ".env" + ".*"})
 
     assert expected_ignores <= ignored_paths
+    assert "mockdata" not in ignored_paths
     assert "tests" not in ignored_paths

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 
 # Refresh: pull python:3.12-slim, inspect its RepoDigests, then review and replace this digest.
 FROM python:3.12-slim@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a AS base
@@ -31,7 +31,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY manage.py ./
 COPY apps ./apps
-COPY config ./config
+COPY config/*.py ./config/
+COPY config/settings/__init__.py ./config/settings/__init__.py
+COPY config/settings/base.py ./config/settings/base.py
+COPY config/settings/production.py ./config/settings/production.py
 COPY docker/django/entrypoint.sh ./docker/django/entrypoint.sh
 RUN install -d -o app -g app /app/media /home/app/.cache/huggingface
 
@@ -49,6 +52,7 @@ COPY apps ./apps
 COPY config ./config
 COPY docker/django/entrypoint.sh ./docker/django/entrypoint.sh
 COPY tests ./tests
+COPY mockdata ./mockdata
 RUN install -d -o app -g app /app/media /home/app/.cache/huggingface
 
 USER app
