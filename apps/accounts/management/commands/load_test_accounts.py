@@ -7,8 +7,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
-from apps.accounts.models import Subscription
+from apps.accounts.models import DailyTokenUsage, Subscription
 
 
 class Command(BaseCommand):
@@ -59,16 +60,23 @@ class Command(BaseCommand):
                     if account["subscription_active"]
                     else Subscription.Status.INACTIVE
                 )
+                daily_token_limit = account.get(
+                    "daily_token_limit",
+                    settings.DEFAULT_DAILY_TOKEN_LIMIT,
+                )
                 Subscription.objects.update_or_create(
                     user=user,
                     defaults={
                         "status": subscription_status,
-                        "daily_token_limit": account.get(
-                            "daily_token_limit",
-                            settings.DEFAULT_DAILY_TOKEN_LIMIT,
-                        ),
+                        "daily_token_limit": daily_token_limit,
                     },
                 )
+                if "daily_tokens_used" in account:
+                    DailyTokenUsage.objects.update_or_create(
+                        user=user,
+                        usage_date=timezone.localdate(),
+                        defaults={"used_tokens": account["daily_tokens_used"]},
+                    )
 
                 if created:
                     created_count += 1
@@ -125,6 +133,20 @@ def load_accounts(path: Path) -> list[dict[str, Any]]:
         ):
             raise CommandError(
                 f"Test account #{index} daily_token_limit must be a positive integer."
+            )
+        daily_tokens_used = account.get("daily_tokens_used")
+        if daily_tokens_used is not None and (
+            isinstance(daily_tokens_used, bool)
+            or not isinstance(daily_tokens_used, int)
+            or daily_tokens_used < 0
+        ):
+            raise CommandError(
+                f"Test account #{index} daily_tokens_used must be a non-negative integer."
+            )
+        effective_daily_limit = daily_token_limit or settings.DEFAULT_DAILY_TOKEN_LIMIT
+        if daily_tokens_used is not None and daily_tokens_used > effective_daily_limit:
+            raise CommandError(
+                f"Test account #{index} daily_tokens_used must not exceed daily_token_limit."
             )
 
     return accounts

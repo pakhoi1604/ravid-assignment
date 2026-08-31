@@ -2,15 +2,20 @@ from types import SimpleNamespace
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.urls import reverse
+from django.utils import timezone
+from langchain_core.documents import Document
 
 from apps.accounts.entitlements import InactiveSubscriptionError, InsufficientCreditsError
+from apps.accounts.models import DailyTokenUsage
 from apps.rag.exceptions import (
     RagAccountingError,
     RagConfigurationError,
     RagProviderError,
     RagRetrievalError,
 )
+from apps.rag.services import RagService
 
 
 @pytest.fixture
@@ -27,6 +32,29 @@ def auth_headers_for(client, user):
     return {"HTTP_AUTHORIZATION": f"Bearer {response.json()['access']}"}
 
 
+def auth_headers_for_credentials(client, *, username, password):
+    response = client.post(
+        reverse("token_obtain_pair"),
+        {"username": username, "password": password},
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    return {"HTTP_AUTHORIZATION": f"Bearer {response.json()['access']}"}
+
+
+def guard_rag_external_adapters(monkeypatch, *, vector_store_factory):
+    original_init = RagService.__init__
+
+    def init_with_guarded_adapters(service):
+        original_init(
+            service,
+            vector_store_factory=vector_store_factory,
+            model_builder=lambda **kwargs: pytest.fail("answer model must not be built"),
+        )
+
+    monkeypatch.setattr(RagService, "__init__", init_with_guarded_adapters)
+
+
 @pytest.mark.django_db
 def test_chat_query_requires_authentication(client):
     response = client.post(
@@ -36,6 +64,82 @@ def test_chat_query_requires_authentication(client):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("username", "password", "expected_remaining"),
+    [
+        ("reviewer_no_tokens", "reviewer-no-tokens-password-123", 0),
+        (
+            "reviewer_insufficient_tokens",
+            "reviewer-insufficient-tokens-password-123",
+            1,
+        ),
+    ],
+)
+def test_seeded_insufficient_credit_accounts_are_rejected_before_answer_rendering(
+    client,
+    settings,
+    monkeypatch,
+    username,
+    password,
+    expected_remaining,
+):
+    monkeypatch.setenv("ALLOW_TEST_ACCOUNT_SEED", "true")
+    settings.OPENROUTER_API_KEY = "test-key"
+    settings.OPENROUTER_MODEL = "openrouter/free"
+    call_command("load_test_accounts")
+
+    vector_store = SimpleNamespace(
+        retrieve_for_user=lambda **kwargs: [
+            Document(page_content="Owner-scoped context", metadata={"user_id": kwargs["user_id"]})
+        ]
+    )
+    guard_rag_external_adapters(
+        monkeypatch,
+        vector_store_factory=lambda: vector_store,
+    )
+
+    response = client.post(
+        reverse("chat-query"),
+        {"query": "What does the document say?", "use_hyde": False},
+        content_type="application/json",
+        **auth_headers_for_credentials(client, username=username, password=password),
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {"error": "Insufficient daily token credits."}
+    user = get_user_model().objects.get(username=username)
+    usage = DailyTokenUsage.objects.get(user=user, usage_date=timezone.localdate())
+    assert user.subscription.daily_token_limit - usage.used_tokens == expected_remaining
+
+
+@pytest.mark.django_db
+def test_seeded_unsubscribed_account_is_rejected_before_provider_or_retrieval(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setenv("ALLOW_TEST_ACCOUNT_SEED", "true")
+    call_command("load_test_accounts")
+    guard_rag_external_adapters(
+        monkeypatch,
+        vector_store_factory=lambda: pytest.fail("retrieval must not run"),
+    )
+
+    response = client.post(
+        reverse("chat-query"),
+        {"query": "What does the document say?", "use_hyde": False},
+        content_type="application/json",
+        **auth_headers_for_credentials(
+            client,
+            username="reviewer_unsubscribed",
+            password="reviewer-unsubscribed-password-123",
+        ),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "Active subscription required."}
 
 
 @pytest.mark.django_db

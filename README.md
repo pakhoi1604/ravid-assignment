@@ -150,9 +150,19 @@ JWT access tokens are configured for reviewer convenience and last 7 days by def
 `JWT_ACCESS_TOKEN_LIFETIME_DAYS` and `JWT_REFRESH_TOKEN_LIFETIME_DAYS` in `.env` if needed.
 
 `DEFAULT_DAILY_TOKEN_LIMIT` is a local application quota, not OpenRouter billing credit. Seeded
-reviewer accounts receive an active local subscription and the configured daily limit. Retrieved
-document chunks are sent to the external model provider during live chat, so use only synthetic or
-explicitly approved non-sensitive documents. Rotate any key that has previously been exposed.
+reviewer accounts receive an active local subscription and the configured daily limit. Three
+negative-path accounts exercise the entitlement gate:
+
+- `reviewer_no_tokens` / `reviewer-no-tokens-password-123`: active, `0` tokens remaining; returns
+  `429` with `{"error":"Insufficient daily token credits."}`.
+- `reviewer_unsubscribed` / `reviewer-unsubscribed-password-123`: inactive subscription; returns
+  `403` with `{"error":"Active subscription required."}`.
+- `reviewer_insufficient_tokens` / `reviewer-insufficient-tokens-password-123`: active, `1` token
+  remaining; returns the same `429` because the answer reservation cannot fit.
+
+The entitlement failures occur before final-answer model dispatch. Retrieved document chunks are
+sent to the external model provider during live chat, so use only synthetic or explicitly approved
+non-sensitive documents. Rotate any key that has previously been exposed.
 Synchronous provider requests use a 10-second final-answer budget and a 3-second HyDE budget. SDK
 retries are disabled. Expected HyDE timeout/transport or invalid-output failures fall back once to
 standard retrieval; there is no provider retry. Final-answer provider failure returns a safe `503`.

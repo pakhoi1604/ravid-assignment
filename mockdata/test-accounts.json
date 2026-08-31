@@ -17,6 +17,35 @@
       "is_superuser": false,
       "subscription_active": true,
       "daily_token_limit": 20000
+    },
+    {
+      "username": "reviewer_no_tokens",
+      "email": "reviewer-no-tokens@example.com",
+      "password": "reviewer-no-tokens-password-123",
+      "is_staff": false,
+      "is_superuser": false,
+      "subscription_active": true,
+      "daily_token_limit": 20000,
+      "daily_tokens_used": 20000
+    },
+    {
+      "username": "reviewer_unsubscribed",
+      "email": "reviewer-unsubscribed@example.com",
+      "password": "reviewer-unsubscribed-password-123",
+      "is_staff": false,
+      "is_superuser": false,
+      "subscription_active": false,
+      "daily_token_limit": 20000
+    },
+    {
+      "username": "reviewer_insufficient_tokens",
+      "email": "reviewer-insufficient-tokens@example.com",
+      "password": "reviewer-insufficient-tokens-password-123",
+      "is_staff": false,
+      "is_superuser": false,
+      "subscription_active": true,
+      "daily_token_limit": 20000,
+      "daily_tokens_used": 19999
     }
   ]
 }

@@ -5,6 +5,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.utils import timezone
 
 from apps.accounts.models import DailyTokenUsage, Subscription
 
@@ -99,6 +100,31 @@ def test_load_test_accounts_is_idempotent_and_updates_existing_users(tmp_path, m
     assert reviewer.subscription.daily_token_limit == 12_345
     assert DailyTokenUsage.objects.count() == 0
     assert "0 created, 1 updated" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_load_test_accounts_seeds_exhausted_daily_usage(tmp_path, monkeypatch):
+    monkeypatch.setenv("ALLOW_TEST_ACCOUNT_SEED", "true")
+    accounts_path = tmp_path / "accounts.json"
+    write_accounts(
+        accounts_path,
+        [
+            {
+                "username": "reviewer_no_tokens",
+                "password": "reviewer-no-tokens-password-123",
+                "daily_token_limit": 20_000,
+                "daily_tokens_used": 20_000,
+            }
+        ],
+    )
+
+    call_command("load_test_accounts", str(accounts_path))
+
+    user = get_user_model().objects.get(username="reviewer_no_tokens")
+    usage = DailyTokenUsage.objects.get(user=user, usage_date=timezone.localdate())
+    assert user.subscription.status == Subscription.Status.ACTIVE
+    assert user.subscription.daily_token_limit == 20_000
+    assert usage.used_tokens == user.subscription.daily_token_limit
 
 
 @pytest.mark.django_db
@@ -229,4 +255,28 @@ def test_load_test_accounts_rejects_invalid_daily_limit(tmp_path, monkeypatch):
     )
 
     with pytest.raises(CommandError, match="daily_token_limit must be a positive integer"):
+        call_command("load_test_accounts", str(accounts_path))
+
+
+@pytest.mark.parametrize("daily_tokens_used", [-1, True, 20_001])
+def test_load_test_accounts_rejects_invalid_daily_usage(
+    tmp_path,
+    monkeypatch,
+    daily_tokens_used,
+):
+    monkeypatch.setenv("ALLOW_TEST_ACCOUNT_SEED", "true")
+    accounts_path = tmp_path / "accounts.json"
+    write_accounts(
+        accounts_path,
+        [
+            {
+                "username": "reviewer_no_tokens",
+                "password": "reviewer-no-tokens-password-123",
+                "daily_token_limit": 20_000,
+                "daily_tokens_used": daily_tokens_used,
+            }
+        ],
+    )
+
+    with pytest.raises(CommandError, match="daily_tokens_used"):
         call_command("load_test_accounts", str(accounts_path))
