@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from apps.rag.tokens import (
+    bound_usage_to_reservation,
     estimate_prompt_bound,
     estimate_text_tokens,
     extract_total_tokens,
@@ -31,3 +32,8 @@ def test_usage_falls_back_to_deterministic_estimate():
 
     assert usage_or_fallback(message, prompt_text="12345678", answer="1234") == 3
     assert estimate_text_tokens("") == 1
+
+
+def test_usage_settlement_is_capped_to_reservation():
+    assert bound_usage_to_reservation(50, reservation_tokens=40) == 40
+    assert bound_usage_to_reservation(10, reservation_tokens=40) == 10

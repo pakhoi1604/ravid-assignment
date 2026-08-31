@@ -2,8 +2,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 
+from apps.documents.exceptions import IngestionError
+from apps.documents.ingestion import run_ingestion_pipeline
 from apps.documents.models import Document, IngestionJob
-from apps.documents.services import IngestionError, run_ingestion_pipeline
 
 
 @pytest.fixture
@@ -24,8 +25,8 @@ def test_run_ingestion_pipeline_replaces_document_chunks(job, monkeypatch):
     captured = []
 
     class Store:
-        def replace_document_chunks(self, document_id, chunks):
-            captured.append((document_id, chunks))
+        def replace_document_chunks(self, *, user_id, document_id, chunks):
+            captured.append((user_id, document_id, chunks))
 
     monkeypatch.setattr("apps.documents.extraction.extract_text", lambda *_args: "alpha beta")
     monkeypatch.setattr(
@@ -36,7 +37,8 @@ def test_run_ingestion_pipeline_replaces_document_chunks(job, monkeypatch):
     count = run_ingestion_pipeline(job)
 
     assert count == 2
-    document_id, chunks = captured[0]
+    user_id, document_id, chunks = captured[0]
+    assert user_id == job.document.owner_id
     assert document_id == str(job.document.public_id)
     assert [chunk.text for chunk in chunks] == ["alpha", "beta"]
     assert chunks[0].metadata["user_id"] == job.document.owner_id

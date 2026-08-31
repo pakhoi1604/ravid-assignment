@@ -1,32 +1,18 @@
-from dataclasses import dataclass
-
 from django.conf import settings
 
+from apps.documents import chunking, extraction, vector_store
+from apps.documents.contracts import Chunk
+from apps.documents.exceptions import IngestionError
 from apps.documents.models import IngestionJob
 
 
-class IngestionError(Exception):
-    """Raised for expected document ingestion failures."""
-
-
-@dataclass(frozen=True)
-class Chunk:
-    text: str
-    metadata: dict[str, str | int]
-    id: str
-
-
 def run_ingestion_pipeline(job: IngestionJob) -> int:
-    from apps.documents.chunking import split_text
-    from apps.documents.extraction import extract_text
-    from apps.documents.vector_store import get_vector_store
-
     document = job.document
-    text = extract_text(document.file.path, document.original_filename)
+    text = extraction.extract_text(document.file.path, document.original_filename)
     if not text.strip():
         raise IngestionError("Failed to parse document content.")
 
-    texts = split_text(
+    texts = chunking.split_text(
         text,
         chunk_size=settings.VECTOR_CHUNK_SIZE,
         chunk_overlap=settings.VECTOR_CHUNK_OVERLAP,
@@ -50,6 +36,10 @@ def run_ingestion_pipeline(job: IngestionJob) -> int:
         for index, chunk_text in enumerate(texts)
     ]
 
-    vector_store = get_vector_store()
-    vector_store.replace_document_chunks(str(document.public_id), chunks)
+    store = vector_store.get_vector_store()
+    store.replace_document_chunks(
+        user_id=document.owner_id,
+        document_id=str(document.public_id),
+        chunks=chunks,
+    )
     return len(chunks)

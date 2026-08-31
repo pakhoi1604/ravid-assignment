@@ -5,7 +5,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.entitlements import InactiveSubscriptionError, InsufficientCreditsError
-from apps.rag.exceptions import RagConfigurationError, RagProviderError, RagRetrievalError
+from apps.rag.exceptions import (
+    RagAccountingError,
+    RagConfigurationError,
+    RagProviderError,
+    RagRetrievalError,
+)
 from apps.rag.serializers import (
     ChatAnswerSerializer,
     ChatErrorSerializer,
@@ -41,6 +46,7 @@ class ChatQueryView(APIView):
             result = RagService().answer_query(
                 user=request.user,
                 query=serializer.validated_data["query"],
+                use_hyde=serializer.validated_data["use_hyde"],
             )
         except InactiveSubscriptionError:
             return Response(
@@ -62,5 +68,10 @@ class ChatQueryView(APIView):
                 {"error": "Unable to generate answer right now."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+        except RagAccountingError:
+            return Response(
+                {"error": "Unable to generate answer right now."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        return Response({"answer": result.answer}, status=status.HTTP_200_OK)
+        return Response(ChatAnswerSerializer(result).data, status=status.HTTP_200_OK)

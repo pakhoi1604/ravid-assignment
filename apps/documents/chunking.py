@@ -1,4 +1,4 @@
-from apps.documents.services import IngestionError
+from apps.documents.exceptions import IngestionError
 
 
 def split_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:

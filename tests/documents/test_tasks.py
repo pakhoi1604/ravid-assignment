@@ -2,8 +2,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 
+from apps.documents.exceptions import IngestionError
 from apps.documents.models import Document, IngestionJob
-from apps.documents.services import IngestionError
 from apps.documents.tasks import enqueue_ingestion, ingest_document
 
 

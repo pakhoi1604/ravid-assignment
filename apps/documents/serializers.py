@@ -3,10 +3,9 @@ from pathlib import Path
 from django.conf import settings
 from rest_framework import serializers
 
+from apps.documents.constants import ALLOWED_UPLOAD_EXTENSIONS, INVALID_FORMAT_ERROR
 from apps.documents.models import IngestionJob
 
-ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown"}
-INVALID_FORMAT_ERROR = "Invalid file format. Only PDF, TXT, and Markdown files are allowed."
 SUCCESS_MESSAGE = "Document successfully parsed, embedded, and indexed in vector storage."
 
 

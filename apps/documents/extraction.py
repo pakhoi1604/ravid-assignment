@@ -1,15 +1,16 @@
 from pathlib import Path
 
-from apps.documents.services import IngestionError
+from apps.documents.constants import INVALID_FORMAT_ERROR, PDF_EXTENSION, PLAIN_TEXT_EXTENSIONS
+from apps.documents.exceptions import IngestionError
 
 
 def extract_text(file_path: str, original_filename: str) -> str:
     extension = Path(original_filename).suffix.lower()
-    if extension == ".pdf":
+    if extension == PDF_EXTENSION:
         return extract_pdf_text(file_path)
-    if extension in {".txt", ".md", ".markdown"}:
+    if extension in PLAIN_TEXT_EXTENSIONS:
         return extract_plain_text(file_path)
-    raise IngestionError("Invalid file format. Only PDF, TXT, and Markdown files are allowed.")
+    raise IngestionError(INVALID_FORMAT_ERROR)
 
 
 def extract_plain_text(file_path: str) -> str:

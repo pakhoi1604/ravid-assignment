@@ -12,3 +12,7 @@ class ProviderTransportError(Exception):
 
 class RagProviderError(Exception):
     """Raised when the RAG answer provider cannot complete a request."""
+
+
+class RagAccountingError(Exception):
+    """Raised when final token settlement cannot be safely completed."""

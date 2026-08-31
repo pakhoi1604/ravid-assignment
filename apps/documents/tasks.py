@@ -5,8 +5,9 @@ from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
 
+from apps.documents.exceptions import IngestionError
+from apps.documents.ingestion import run_ingestion_pipeline
 from apps.documents.models import IngestionJob
-from apps.documents.services import IngestionError, run_ingestion_pipeline
 
 logger = logging.getLogger(__name__)
 

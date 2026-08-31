@@ -34,8 +34,14 @@ def test_rag_defaults_use_free_router_and_bounded_requests():
     assert settings.OPENROUTER_MODEL == "openrouter/free"
     assert settings.DEFAULT_DAILY_TOKEN_LIMIT == 20_000
     assert settings.RAG_RETRIEVAL_K == 4
+    assert settings.RAG_RETRIEVAL_SEARCH_TYPE == "similarity_score_threshold"
+    assert settings.RAG_RETRIEVAL_SCORE_THRESHOLD == 0.2
+    assert settings.RAG_RETRIEVAL_FETCH_K == 20
     assert settings.RAG_MAX_CONTEXT_CHARS == 6_000
     assert settings.RAG_MAX_OUTPUT_TOKENS == 800
+    assert settings.RAG_HYDE_MAX_OUTPUT_TOKENS == 256
+    assert settings.RAG_HYDE_MAX_OUTPUT_CHARS == 2_000
+    assert settings.RAG_HYDE_TIMEOUT_MS == 3_000
     assert settings.RAG_CHAT_OVERHEAD_TOKENS == 256
     assert settings.RAG_TEMPERATURE == 0
     assert settings.RAG_PROVIDER_TIMEOUT_MS == 10_000

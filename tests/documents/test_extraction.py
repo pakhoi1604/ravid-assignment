@@ -3,8 +3,8 @@ import types
 
 import pytest
 
+from apps.documents.exceptions import IngestionError
 from apps.documents.extraction import extract_pdf_text, extract_plain_text, extract_text
-from apps.documents.services import IngestionError
 
 
 def test_extract_plain_text_reads_utf8(tmp_path):

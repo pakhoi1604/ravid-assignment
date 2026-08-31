@@ -42,6 +42,28 @@ def test_openrouter_model_uses_effective_bounded_timeout_and_no_retries(settings
     assert sdk_configuration.retry_config is None
 
 
+def test_openrouter_model_uses_hyde_overrides_for_transport_and_output(settings):
+    settings.OPENROUTER_API_KEY = "test-key"
+    settings.OPENROUTER_MODEL = "openrouter/free"
+
+    model = build_openrouter_chat_model(timeout_ms=3_000, max_output_tokens=256)
+    sdk_configuration = model.client.sdk_configuration
+
+    assert sdk_configuration.timeout_ms == 3_000
+    assert model.max_tokens == 256
+
+
+def test_openrouter_configuration_rejects_non_positive_overrides(settings):
+    settings.OPENROUTER_API_KEY = "test-key"
+    settings.OPENROUTER_MODEL = "openrouter/free"
+
+    with pytest.raises(RagConfigurationError, match="positive integer"):
+        build_openrouter_chat_model(max_output_tokens=0)
+
+    with pytest.raises(RagConfigurationError, match="positive integer"):
+        build_openrouter_chat_model(timeout_ms=0)
+
+
 def test_provider_adapter_translates_openrouter_error():
     error = OpenRouterError(
         "provider failed",

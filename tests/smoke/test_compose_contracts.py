@@ -82,8 +82,18 @@ def test_web_forwards_free_router_and_rag_defaults():
     assert web_environment["OPENROUTER_MODEL"] == "${OPENROUTER_MODEL:-openrouter/free}"
     assert web_environment["DEFAULT_DAILY_TOKEN_LIMIT"] == "${DEFAULT_DAILY_TOKEN_LIMIT:-20000}"
     assert web_environment["RAG_RETRIEVAL_K"] == "${RAG_RETRIEVAL_K:-4}"
+    assert web_environment["RAG_RETRIEVAL_SEARCH_TYPE"] == (
+        "${RAG_RETRIEVAL_SEARCH_TYPE:-similarity_score_threshold}"
+    )
+    assert web_environment["RAG_RETRIEVAL_SCORE_THRESHOLD"] == (
+        "${RAG_RETRIEVAL_SCORE_THRESHOLD:-0.2}"
+    )
+    assert web_environment["RAG_RETRIEVAL_FETCH_K"] == "${RAG_RETRIEVAL_FETCH_K:-20}"
     assert web_environment["RAG_MAX_CONTEXT_CHARS"] == "${RAG_MAX_CONTEXT_CHARS:-6000}"
     assert web_environment["RAG_MAX_OUTPUT_TOKENS"] == "${RAG_MAX_OUTPUT_TOKENS:-800}"
+    assert web_environment["RAG_HYDE_MAX_OUTPUT_TOKENS"] == ("${RAG_HYDE_MAX_OUTPUT_TOKENS:-256}")
+    assert web_environment["RAG_HYDE_MAX_OUTPUT_CHARS"] == ("${RAG_HYDE_MAX_OUTPUT_CHARS:-2000}")
+    assert web_environment["RAG_HYDE_TIMEOUT_MS"] == "${RAG_HYDE_TIMEOUT_MS:-3000}"
     assert web_environment["RAG_CHAT_OVERHEAD_TOKENS"] == ("${RAG_CHAT_OVERHEAD_TOKENS:-256}")
     assert web_environment["RAG_TEMPERATURE"] == "${RAG_TEMPERATURE:-0}"
     assert web_environment["RAG_PROVIDER_TIMEOUT_MS"] == "${RAG_PROVIDER_TIMEOUT_MS:-10000}"

@@ -33,3 +33,9 @@ def usage_or_fallback(message: Any, *, prompt_text: str, answer: str) -> int:
     if total_tokens is not None:
         return total_tokens
     return estimate_text_tokens(prompt_text) + estimate_text_tokens(answer)
+
+
+def bound_usage_to_reservation(usage: int, *, reservation_tokens: int) -> int:
+    if reservation_tokens < 0:
+        raise ValueError("reservation_tokens must be a non-negative integer.")
+    return usage if usage <= reservation_tokens else reservation_tokens
