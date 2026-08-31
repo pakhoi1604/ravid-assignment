@@ -3,7 +3,6 @@
 .claude
 .codex
 .agents
-.superpowers
 .env
 .env.*
 !.env.example
@@ -17,7 +16,6 @@ htmlcov
 /media
 /staticfiles
 /chroma
-mockdata
 docs
 plans
 *.pdf
